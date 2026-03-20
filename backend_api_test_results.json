@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-03-20T04:20:58.187667",
-  "total_tests": 12,
-  "passed_tests": 11,
+  "timestamp": "2026-03-20T04:53:46.634061",
+  "total_tests": 16,
+  "passed_tests": 15,
   "failed_tests": 1,
-  "success_rate": 91.66666666666666,
+  "success_rate": 93.75,
   "detailed_results": [
     {
       "test": "GET /api/",
@@ -38,10 +38,10 @@
       "status": "PASSED"
     },
     {
-      "test": "GET /listings/test-id/whatsapp-click (no auth)",
+      "test": "POST /api/listings/test-id/whatsapp-click (no auth)",
       "status": "FAILED",
       "error": null,
-      "status_code": 405
+      "status_code": 404
     },
     {
       "test": "POST /api/listings (no auth)",
@@ -53,6 +53,22 @@
     },
     {
       "test": "GET /api/files/non-existent (404)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/auth/me (with auth)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/my-listings (with auth)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/listings (with auth)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/listings/{id} (SEO data)",
       "status": "PASSED"
     }
   ]

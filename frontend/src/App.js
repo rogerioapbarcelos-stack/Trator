@@ -6,7 +6,8 @@ import { Toaster, toast } from "sonner";
 import { 
   Search, Menu, X, MapPin, Phone, ChevronRight, Star, Eye, Clock, 
   Plus, LogOut, User, Settings, Tractor, Wrench, Cog, Loader2,
-  ChevronLeft, MessageCircle, Share2, Heart, Filter, Grid, List
+  ChevronLeft, MessageCircle, Share2, Heart, Filter, Grid, List,
+  Upload, Image as ImageIcon, Trash2, Edit, Camera
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,9 +33,45 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { SEOHead, getListingSEO, getSearchSEO } from "@/components/SEOHead";
+
+// Fix Leaflet default marker icon
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// MS Cities coordinates for map
+const MS_CITY_COORDS = {
+  "Campo Grande": [-20.4697, -54.6201],
+  "Dourados": [-22.2231, -54.8118],
+  "Três Lagoas": [-20.7849, -51.7013],
+  "Corumbá": [-19.0087, -57.6517],
+  "Ponta Porã": [-22.5357, -55.7256],
+  "Naviraí": [-23.0651, -54.1996],
+  "Nova Andradina": [-22.2328, -53.3434],
+  "Aquidauana": [-20.4666, -55.7869],
+  "Sidrolândia": [-20.9308, -54.9610],
+  "Paranaíba": [-19.6744, -51.1909],
+  "Maracaju": [-21.6108, -55.1678],
+  "Coxim": [-18.5066, -54.7600],
+  "Amambai": [-23.1048, -55.2256],
+  "Rio Brilhante": [-21.8014, -54.5461],
+  "Cassilândia": [-19.1127, -51.7349],
+  "Chapadão do Sul": [-18.7881, -52.6265],
+  "Costa Rica": [-18.5425, -53.1281],
+  "São Gabriel do Oeste": [-19.3919, -54.5508],
+  "Jardim": [-21.4799, -56.1380],
+  "Bonito": [-21.1267, -56.4836]
+};
 
 // Auth Context
 const AuthContext = createContext(null);
@@ -46,7 +83,6 @@ const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
-    // CRITICAL: Skip if returning from OAuth - let AuthCallback handle it
     if (window.location.hash?.includes('session_id=')) {
       setLoading(false);
       return;
@@ -147,7 +183,6 @@ const Header = () => {
     <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 md:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-2" data-testid="logo-link">
             <div className="w-10 h-10 bg-[#1A4D2E] rounded-lg flex items-center justify-center">
               <Tractor className="w-6 h-6 text-white" />
@@ -157,7 +192,6 @@ const Header = () => {
             </span>
           </Link>
 
-          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/buscar?category=tratores" className="text-slate-600 hover:text-[#1A4D2E] transition-colors" data-testid="nav-tractors">
               Tratores
@@ -173,7 +207,6 @@ const Header = () => {
             </Link>
           </nav>
 
-          {/* Right Actions */}
           <div className="flex items-center gap-3">
             <Button 
               onClick={() => navigate(user ? '/anunciar' : '/login')}
@@ -225,7 +258,6 @@ const Header = () => {
               </Button>
             )}
 
-            {/* Mobile Menu Button */}
             <Button 
               variant="ghost" 
               size="icon" 
@@ -238,20 +270,19 @@ const Header = () => {
           </div>
         </div>
 
-        {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-slate-100 mobile-menu-enter">
             <nav className="flex flex-col gap-2">
-              <Link to="/buscar?category=tratores" className="px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">
+              <Link to="/buscar?category=tratores" className="px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-lg" onClick={() => setMobileMenuOpen(false)}>
                 Tratores
               </Link>
-              <Link to="/buscar?category=implementos" className="px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">
+              <Link to="/buscar?category=implementos" className="px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-lg" onClick={() => setMobileMenuOpen(false)}>
                 Implementos
               </Link>
-              <Link to="/buscar?category=colheitadeiras" className="px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">
+              <Link to="/buscar?category=colheitadeiras" className="px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-lg" onClick={() => setMobileMenuOpen(false)}>
                 Colheitadeiras
               </Link>
-              <Link to="/buscar?category=pecas" className="px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-lg">
+              <Link to="/buscar?category=pecas" className="px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-lg" onClick={() => setMobileMenuOpen(false)}>
                 Peças
               </Link>
               <div className="pt-2 mt-2 border-t border-slate-100">
@@ -350,6 +381,7 @@ const ListingCard = ({ listing }) => {
           src={imageUrl} 
           alt={listing.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          loading="lazy"
           onError={(e) => {
             e.target.src = 'https://images.unsplash.com/photo-1758533696874-587c4e62940c?w=400&h=300&fit=crop';
           }}
@@ -406,6 +438,7 @@ const CategoryCard = ({ category, image, count }) => {
         src={image} 
         alt={category.name}
         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+        loading="lazy"
       />
       <div className="absolute inset-0 category-overlay" />
       <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
@@ -472,6 +505,152 @@ const SearchBar = ({ onSearch, initialQuery = '', initialCity = '' }) => {
   );
 };
 
+// Image Upload Component
+const ImageUploader = ({ images, onImagesChange, listingId, maxImages = 10 }) => {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    if (images.length + files.length > maxImages) {
+      toast.error(`Máximo de ${maxImages} imagens permitido`);
+      return;
+    }
+
+    setUploading(true);
+    const newImages = [];
+
+    for (const file of files) {
+      // Validate file type
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        toast.error(`${file.name}: Formato não suportado`);
+        continue;
+      }
+
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`${file.name}: Arquivo muito grande (max 5MB)`);
+        continue;
+      }
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await axios.post(
+          `${API}/listings/${listingId}/images`,
+          formData,
+          { 
+            withCredentials: true,
+            headers: { 'Content-Type': 'multipart/form-data' }
+          }
+        );
+        newImages.push(res.data.path);
+      } catch (error) {
+        console.error("Error uploading image:", error);
+        toast.error(`Erro ao enviar ${file.name}`);
+      }
+    }
+
+    if (newImages.length > 0) {
+      onImagesChange([...images, ...newImages]);
+      toast.success(`${newImages.length} imagem(ns) enviada(s)`);
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeImage = (index) => {
+    const newImages = images.filter((_, i) => i !== index);
+    onImagesChange(newImages);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        {images.map((img, idx) => (
+          <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 group">
+            <img 
+              src={`${API}/files/${img}`} 
+              alt={`Imagem ${idx + 1}`}
+              className="w-full h-full object-cover"
+            />
+            <button
+              type="button"
+              onClick={() => removeImage(idx)}
+              className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            {idx === 0 && (
+              <span className="absolute bottom-2 left-2 px-2 py-0.5 bg-[#1A4D2E] text-white text-xs rounded">
+                Principal
+              </span>
+            )}
+          </div>
+        ))}
+        
+        {images.length < maxImages && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="aspect-square rounded-lg border-2 border-dashed border-slate-300 hover:border-[#1A4D2E] flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-[#1A4D2E] transition-colors"
+          >
+            {uploading ? (
+              <Loader2 className="w-8 h-8 animate-spin" />
+            ) : (
+              <>
+                <Camera className="w-8 h-8" />
+                <span className="text-xs">Adicionar</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+
+      <p className="text-xs text-slate-500">
+        {images.length}/{maxImages} imagens • JPEG, PNG ou WebP • Máx. 5MB cada
+      </p>
+    </div>
+  );
+};
+
+// Location Map Component
+const LocationMap = ({ city, className = "" }) => {
+  const coords = MS_CITY_COORDS[city] || MS_CITY_COORDS["Campo Grande"];
+  
+  return (
+    <div className={`rounded-lg overflow-hidden ${className}`} style={{ height: '300px' }}>
+      <MapContainer 
+        center={coords} 
+        zoom={12} 
+        scrollWheelZoom={false}
+        style={{ height: '100%', width: '100%' }}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Marker position={coords}>
+          <Popup>{city}, MS</Popup>
+        </Marker>
+      </MapContainer>
+    </div>
+  );
+};
+
 // Home Page
 const HomePage = () => {
   const navigate = useNavigate();
@@ -523,6 +702,8 @@ const HomePage = () => {
 
   return (
     <div className="min-h-screen bg-white" data-testid="home-page">
+      <SEOHead />
+      
       {/* Hero Section */}
       <section className="relative bg-[#1A4D2E] overflow-hidden">
         <div className="absolute inset-0">
@@ -691,6 +872,8 @@ const SearchPage = () => {
   const search = searchParams.get('search') || '';
   const featured = searchParams.get('featured') === 'true';
 
+  const seo = getSearchSEO(category, city, search);
+
   useEffect(() => {
     const fetchListings = async () => {
       setLoading(true);
@@ -735,6 +918,12 @@ const SearchPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50" data-testid="search-page">
+      <SEOHead 
+        title={seo.title}
+        description={seo.description}
+        keywords={seo.keywords}
+      />
+      
       {/* Search Header */}
       <div className="bg-white border-b border-slate-200 py-6">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
@@ -859,14 +1048,12 @@ const ListingDetailPage = () => {
   const handleWhatsAppClick = async () => {
     if (!listing) return;
     
-    // Track click
     try {
       await axios.post(`${API}/listings/${listing.listing_id}/whatsapp-click`);
     } catch (error) {
       console.error("Error tracking click:", error);
     }
 
-    // Open WhatsApp
     const message = encodeURIComponent(`Olá! Vi seu anúncio "${listing.title}" no TratorShop e tenho interesse.`);
     const phone = listing.whatsapp.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${message}`, '_blank');
@@ -900,6 +1087,7 @@ const ListingDetailPage = () => {
 
   if (!listing) return null;
 
+  const seo = getListingSEO(listing);
   const images = listing.images?.length > 0 
     ? listing.images.map(img => `${API}/files/${img}`)
     : ['https://images.unsplash.com/photo-1758533696874-587c4e62940c?w=800&h=600&fit=crop'];
@@ -912,6 +1100,14 @@ const ListingDetailPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50" data-testid="listing-detail-page">
+      <SEOHead 
+        title={seo.title}
+        description={seo.description}
+        keywords={seo.keywords}
+        type="product"
+        image={images[0]}
+      />
+      
       <div className="max-w-6xl mx-auto px-4 md:px-8 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6">
@@ -1020,18 +1216,13 @@ const ListingDetailPage = () => {
               </CardContent>
             </Card>
 
-            {/* Map Placeholder */}
+            {/* Map */}
             <Card>
               <CardHeader>
                 <h3 className="font-semibold text-lg" style={{ fontFamily: 'Outfit' }}>Localização</h3>
               </CardHeader>
               <CardContent>
-                <div className="aspect-[16/9] bg-slate-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center">
-                    <MapPin className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                    <p className="text-slate-500">{listing.city}, {listing.state}</p>
-                  </div>
-                </div>
+                <LocationMap city={listing.city} />
               </CardContent>
             </Card>
           </div>
@@ -1086,14 +1277,19 @@ const ListingDetailPage = () => {
   );
 };
 
-// Create Listing Page
-const CreateListingPage = () => {
-  const { user } = useAuth();
+// Create/Edit Listing Page
+const ListingFormPage = () => {
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { id: editId } = useParams();
+  const isEditing = !!editId;
+  
   const [loading, setLoading] = useState(false);
+  const [fetchingListing, setFetchingListing] = useState(isEditing);
   const [cities, setCities] = useState([]);
   const [images, setImages] = useState([]);
-  const [uploading, setUploading] = useState(false);
+  const [listingId, setListingId] = useState(editId || null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -1108,54 +1304,53 @@ const CreateListingPage = () => {
     whatsapp: ''
   });
 
+  const currentUser = user || location.state?.user;
+
   useEffect(() => {
-    if (!user) {
+    if (authLoading) return;
+    if (!currentUser) {
       navigate('/login');
       return;
     }
     axios.get(`${API}/cities`).then(res => setCities(res.data)).catch(() => {});
-  }, [user, navigate]);
+    
+    // Fetch existing listing for editing
+    if (isEditing) {
+      axios.get(`${API}/listings/${editId}`, { withCredentials: true })
+        .then(res => {
+          const listing = res.data;
+          setFormData({
+            title: listing.title || '',
+            description: listing.description || '',
+            category: listing.category || '',
+            price: listing.price?.toString() || '',
+            brand: listing.brand || '',
+            model: listing.model || '',
+            year: listing.year?.toString() || '',
+            hours_used: listing.hours_used?.toString() || '',
+            condition: listing.condition || '',
+            city: listing.city || '',
+            whatsapp: listing.whatsapp || ''
+          });
+          setImages(listing.images || []);
+          setListingId(listing.listing_id);
+        })
+        .catch(err => {
+          toast.error("Erro ao carregar anúncio");
+          navigate('/dashboard');
+        })
+        .finally(() => setFetchingListing(false));
+    }
+  }, [currentUser, authLoading, navigate, isEditing, editId]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleImageUpload = async (e, listingId) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
-    setUploading(true);
-    const newImages = [];
-
-    for (const file of files) {
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const res = await axios.post(
-          `${API}/listings/${listingId}/images`,
-          formData,
-          { 
-            withCredentials: true,
-            headers: { 'Content-Type': 'multipart/form-data' }
-          }
-        );
-        newImages.push(res.data.path);
-      } catch (error) {
-        console.error("Error uploading image:", error);
-        toast.error(`Erro ao enviar ${file.name}`);
-      }
-    }
-
-    setImages(prev => [...prev, ...newImages]);
-    setUploading(false);
-    toast.success(`${newImages.length} imagem(ns) enviada(s)`);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.title || !formData.description || !formData.category || !formData.price || !formData.city || !formData.whatsapp) {
+    if (!formData.title || !formData.description || !formData.category || !formData.price || !formData.city || !formData.whatsapp || !formData.condition) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
@@ -1169,27 +1364,65 @@ const CreateListingPage = () => {
         hours_used: formData.hours_used ? parseInt(formData.hours_used) : null
       };
 
-      const res = await axios.post(`${API}/listings`, payload, { withCredentials: true });
-      toast.success("Anúncio criado! Aguardando aprovação.");
-      navigate('/dashboard');
+      if (isEditing) {
+        await axios.put(`${API}/listings/${editId}`, payload, { withCredentials: true });
+        toast.success("Anúncio atualizado! Aguardando re-aprovação.");
+      } else {
+        const res = await axios.post(`${API}/listings`, payload, { withCredentials: true });
+        setListingId(res.data.listing_id);
+        toast.success("Anúncio criado! Agora adicione fotos.");
+      }
+      
+      if (!isEditing && !listingId) {
+        // Stay on page to add images after creation
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
-      console.error("Error creating listing:", error);
-      toast.error("Erro ao criar anúncio");
+      console.error("Error saving listing:", error);
+      toast.error("Erro ao salvar anúncio");
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) return null;
+  if (!currentUser && !authLoading) return null;
+  
+  if (fetchingListing) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#1A4D2E]" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8" data-testid="create-listing-page">
+    <div className="min-h-screen bg-slate-50 py-8" data-testid="listing-form-page">
+      <SEOHead title={isEditing ? "Editar Anúncio" : "Anunciar Máquina"} />
+      
       <div className="max-w-3xl mx-auto px-4 md:px-8">
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-8" style={{ fontFamily: 'Outfit' }}>
-          Anunciar Máquina
+          {isEditing ? "Editar Anúncio" : "Anunciar Máquina"}
         </h1>
 
         <form onSubmit={handleSubmit}>
+          {/* Images Section - Show if listing exists */}
+          {listingId && (
+            <Card className="mb-6">
+              <CardHeader>
+                <h2 className="text-lg font-semibold" style={{ fontFamily: 'Outfit' }}>Fotos</h2>
+                <p className="text-sm text-slate-500">Adicione fotos para atrair mais compradores</p>
+              </CardHeader>
+              <CardContent>
+                <ImageUploader 
+                  images={images}
+                  onImagesChange={setImages}
+                  listingId={listingId}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="mb-6">
             <CardHeader>
               <h2 className="text-lg font-semibold" style={{ fontFamily: 'Outfit' }}>Informações Básicas</h2>
@@ -1372,12 +1605,12 @@ const CreateListingPage = () => {
               data-testid="submit-listing"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Criar Anúncio
+              {isEditing ? "Salvar Alterações" : (listingId ? "Atualizar e Finalizar" : "Criar Anúncio")}
             </Button>
           </div>
 
           <p className="text-center text-sm text-slate-500 mt-4">
-            Seu anúncio será analisado antes de ser publicado
+            {isEditing ? "Alterações serão analisadas antes de serem publicadas" : "Seu anúncio será analisado antes de ser publicado"}
           </p>
         </form>
       </div>
@@ -1392,8 +1625,6 @@ const DashboardPage = () => {
   const location = useLocation();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedListing, setSelectedListing] = useState(null);
-  const [uploadingImages, setUploadingImages] = useState(false);
 
   useEffect(() => {
     if (!user && !location.state?.user) {
@@ -1426,41 +1657,6 @@ const DashboardPage = () => {
     }
   };
 
-  const handleImageUpload = async (e, listingId) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
-    setUploadingImages(true);
-    let uploadedCount = 0;
-
-    for (const file of files) {
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        await axios.post(
-          `${API}/listings/${listingId}/images`,
-          formData,
-          { 
-            withCredentials: true,
-            headers: { 'Content-Type': 'multipart/form-data' }
-          }
-        );
-        uploadedCount++;
-      } catch (error) {
-        console.error("Error uploading image:", error);
-        toast.error(`Erro ao enviar ${file.name}`);
-      }
-    }
-
-    setUploadingImages(false);
-    if (uploadedCount > 0) {
-      toast.success(`${uploadedCount} imagem(ns) enviada(s)`);
-      fetchListings();
-    }
-    setSelectedListing(null);
-  };
-
   const formatPrice = (price) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -1476,10 +1672,10 @@ const DashboardPage = () => {
     expired: { label: 'Expirado', className: 'bg-slate-100 text-slate-600' }
   };
 
-  const currentUser = user || location.state?.user;
-
   return (
     <div className="min-h-screen bg-slate-50 py-8" data-testid="dashboard-page">
+      <SEOHead title="Meus Anúncios" />
+      
       <div className="max-w-6xl mx-auto px-4 md:px-8">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -1544,9 +1740,11 @@ const DashboardPage = () => {
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => setSelectedListing(listing)}
+                          onClick={() => navigate(`/editar/${listing.listing_id}`)}
+                          data-testid={`edit-${listing.listing_id}`}
                         >
-                          Adicionar Fotos
+                          <Edit className="w-4 h-4 mr-1" />
+                          Editar
                         </Button>
                         <Button 
                           variant="ghost" 
@@ -1554,7 +1752,7 @@ const DashboardPage = () => {
                           onClick={() => handleDelete(listing.listing_id)}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
-                          Excluir
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
@@ -1576,54 +1774,6 @@ const DashboardPage = () => {
           </Card>
         )}
       </div>
-
-      {/* Image Upload Dialog */}
-      <Dialog open={!!selectedListing} onOpenChange={() => setSelectedListing(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Adicionar Fotos</DialogTitle>
-            <DialogDescription>
-              Adicione fotos ao anúncio: {selectedListing?.title}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="border-2 border-dashed border-slate-200 rounded-lg p-8 text-center">
-              <input
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(e) => handleImageUpload(e, selectedListing?.listing_id)}
-                className="hidden"
-                id="image-upload"
-              />
-              <label htmlFor="image-upload" className="cursor-pointer">
-                {uploadingImages ? (
-                  <Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto mb-2" />
-                ) : (
-                  <Plus className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                )}
-                <p className="text-slate-600">Clique para selecionar imagens</p>
-                <p className="text-sm text-slate-400">JPEG, PNG ou WebP</p>
-              </label>
-            </div>
-            {selectedListing?.images?.length > 0 && (
-              <div>
-                <p className="text-sm text-slate-500 mb-2">Imagens atuais:</p>
-                <div className="flex gap-2 flex-wrap">
-                  {selectedListing.images.map((img, idx) => (
-                    <img 
-                      key={idx}
-                      src={`${API}/files/${img}`}
-                      alt=""
-                      className="w-16 h-16 object-cover rounded"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
@@ -1699,6 +1849,8 @@ const AdminPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 py-8" data-testid="admin-page">
+      <SEOHead title="Painel Admin" />
+      
       <div className="max-w-6xl mx-auto px-4 md:px-8">
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-8" style={{ fontFamily: 'Outfit' }}>
           Painel Administrativo
@@ -1820,6 +1972,8 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center py-12 px-4" data-testid="login-page">
+      <SEOHead title="Entrar" />
+      
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="w-16 h-16 bg-[#1A4D2E] rounded-xl flex items-center justify-center mx-auto mb-4">
@@ -1856,7 +2010,6 @@ const LoginPage = () => {
 const AppRouter = () => {
   const location = useLocation();
   
-  // Check for session_id in URL fragment - handle BEFORE routing
   if (location.hash?.includes('session_id=')) {
     return <AuthCallback />;
   }
@@ -1869,7 +2022,8 @@ const AppRouter = () => {
           <Route path="/" element={<HomePage />} />
           <Route path="/buscar" element={<SearchPage />} />
           <Route path="/anuncio/:id" element={<ListingDetailPage />} />
-          <Route path="/anunciar" element={<CreateListingPage />} />
+          <Route path="/anunciar" element={<ListingFormPage />} />
+          <Route path="/editar/:id" element={<ListingFormPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/login" element={<LoginPage />} />

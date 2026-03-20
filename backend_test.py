@@ -124,8 +124,7 @@ class TratorShopAPITester:
         """Test auth endpoints without authentication (should return 401)"""
         endpoints = [
             "/auth/me",
-            "/my-listings", 
-            "/listings/test-id/whatsapp-click"
+            "/my-listings"
         ]
         
         for endpoint in endpoints:
@@ -135,6 +134,15 @@ class TratorShopAPITester:
                 self.log_test(f"GET {endpoint} (no auth)", success, response.status_code)
             except Exception as e:
                 self.log_test(f"GET {endpoint} (no auth)", False, None, str(e))
+    
+    def test_whatsapp_click_without_auth(self):
+        """Test WhatsApp click endpoint without auth (should return 401)"""
+        try:
+            response = requests.post(f"{self.api_url}/listings/test-id/whatsapp-click")
+            success = response.status_code == 401
+            self.log_test("POST /api/listings/test-id/whatsapp-click (no auth)", success, response.status_code)
+        except Exception as e:
+            self.log_test("POST /api/listings/test-id/whatsapp-click (no auth)", False, None, str(e))
 
     def test_create_listing_without_auth(self):
         """Test creating listing without auth (should return 401)"""
@@ -169,14 +177,111 @@ class TratorShopAPITester:
             except Exception as e:
                 self.log_test(f"GET {endpoint} (no auth)", False, None, str(e))
 
-    def test_file_endpoint_404(self):
-        """Test file endpoint with non-existent file (should return 404)"""
+    def test_authenticated_endpoints_with_token(self):
+        """Test authenticated endpoints with test token"""
+        if not self.session_token:
+            print("⚠️ No session token available, skipping authenticated tests")
+            return
+            
+        headers = {"Authorization": f"Bearer {self.session_token}"}
+        
+        # Test auth/me endpoint
         try:
-            response = requests.get(f"{self.api_url}/files/non-existent-file.jpg")
-            success = response.status_code == 404
-            self.log_test("GET /api/files/non-existent (404)", success, response.status_code)
+            response = requests.get(f"{self.api_url}/auth/me", headers=headers)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = "user_id" in data or "name" in data
+            self.log_test("GET /api/auth/me (with auth)", success, response.status_code)
         except Exception as e:
-            self.log_test("GET /api/files/non-existent (404)", False, None, str(e))
+            self.log_test("GET /api/auth/me (with auth)", False, None, str(e))
+            
+        # Test my-listings endpoint  
+        try:
+            response = requests.get(f"{self.api_url}/my-listings", headers=headers)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = isinstance(data, list)  # Should return list of listings
+            self.log_test("GET /api/my-listings (with auth)", success, response.status_code)
+        except Exception as e:
+            self.log_test("GET /api/my-listings (with auth)", False, None, str(e))
+    
+    def test_listing_creation_with_auth(self):
+        """Test creating a listing with authentication"""
+        if not self.session_token:
+            return
+            
+        headers = {"Authorization": f"Bearer {self.session_token}"}
+        test_listing = {
+            "title": "Test Tractor Optimization",
+            "description": "Test description for optimization features",
+            "category": "tratores", 
+            "price": 125000,
+            "condition": "usado",
+            "city": "Campo Grande",
+            "whatsapp": "67999999999",
+            "brand": "John Deere",
+            "model": "5085E",
+            "year": 2020
+        }
+        
+        try:
+            response = requests.post(f"{self.api_url}/listings", json=test_listing, headers=headers)
+            success = response.status_code in [200, 201]
+            if success:
+                data = response.json()
+                success = "listing_id" in data
+                if success:
+                    self.test_listing_id = data["listing_id"]
+            self.log_test("POST /api/listings (with auth)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/listings (with auth)", False, None, str(e))
+            return False
+    
+    def test_listing_detail_for_seo(self):
+        """Test listing detail endpoint for SEO data"""
+        if not hasattr(self, 'test_listing_id') or not self.test_listing_id:
+            # Try with any existing listing ID
+            try:
+                response = requests.get(f"{self.api_url}/listings")
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("listings") and len(data["listings"]) > 0:
+                        self.test_listing_id = data["listings"][0]["listing_id"]
+            except:
+                pass
+                
+        if hasattr(self, 'test_listing_id') and self.test_listing_id:
+            try:
+                response = requests.get(f"{self.api_url}/listings/{self.test_listing_id}")
+                success = response.status_code == 200
+                if success:
+                    data = response.json()
+                    # Check for SEO-relevant fields
+                    required_fields = ["title", "description", "city", "category", "price"]
+                    success = all(field in data for field in required_fields)
+                self.log_test("GET /api/listings/{id} (SEO data)", success, response.status_code)
+            except Exception as e:
+                self.log_test("GET /api/listings/{id} (SEO data)", False, None, str(e))
+        else:
+            self.log_test("GET /api/listings/{id} (SEO data)", False, None, "No listing ID available")
+    
+    def run_authenticated_tests(self):
+        """Run authenticated tests with provided token"""
+        self.session_token = "test_session_admin_123"  # Use provided test token
+        print("\n🔐 Running authenticated tests...")
+        
+        self.test_authenticated_endpoints_with_token()
+        sleep(0.1)
+        
+        success = self.test_listing_creation_with_auth()
+        sleep(0.1)
+        
+        if success:
+            self.test_listing_detail_for_seo()
+            sleep(0.1)
 
     def run_public_api_tests(self):
         """Run all public API tests"""
@@ -205,13 +310,26 @@ class TratorShopAPITester:
         self.test_auth_endpoints_without_token()
         sleep(0.1)
         
+        self.test_whatsapp_click_without_auth()
+        sleep(0.1)
+        
         self.test_create_listing_without_auth()
         sleep(0.1)
         
         self.test_admin_endpoints_without_auth()
         sleep(0.1)
         
+        # Test file endpoint
         self.test_file_endpoint_404()
+        
+    def test_file_endpoint_404(self):
+        """Test file endpoint with non-existent file (should return 404)"""
+        try:
+            response = requests.get(f"{self.api_url}/files/non-existent-file.jpg")
+            success = response.status_code == 404
+            self.log_test("GET /api/files/non-existent (404)", success, response.status_code)
+        except Exception as e:
+            self.log_test("GET /api/files/non-existent (404)", False, None, str(e))
 
     def print_summary(self):
         """Print test summary"""
@@ -245,6 +363,7 @@ def main():
     
     try:
         tester.run_public_api_tests()
+        tester.run_authenticated_tests()
         tester.print_summary()
         
         # Save results to JSON
