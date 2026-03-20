@@ -11,6 +11,8 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import requests
+import hashlib
+import secrets
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -163,6 +165,39 @@ class SessionData(BaseModel):
     expires_at: str
     created_at: str
 
+# Admin Models
+class AdminLogin(BaseModel):
+    email: str
+    password: str
+
+class AdminCreate(BaseModel):
+    email: str
+    password: str
+    name: str
+
+class AdminChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+
+class PromoteToAdmin(BaseModel):
+    user_email: str
+
+# Password hashing utilities
+def hash_password(password: str) -> str:
+    """Hash password with salt"""
+    salt = secrets.token_hex(16)
+    hashed = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+    return f"{salt}:{hashed.hex()}"
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify password against stored hash"""
+    try:
+        salt, hashed = stored_hash.split(':')
+        new_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+        return new_hash.hex() == hashed
+    except:
+        return False
+
 # MS Cities for dropdown
 MS_CITIES = [
     "Campo Grande", "Dourados", "Três Lagoas", "Corumbá", "Ponta Porã",
@@ -304,16 +339,190 @@ async def get_current_user_route(request: Request):
 async def logout(request: Request):
     """Logout and clear session"""
     session_token = request.cookies.get("session_token")
+    admin_token = request.cookies.get("admin_token")
+    
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
+    if admin_token:
+        await db.admin_sessions.delete_one({"session_token": admin_token})
     
     response = JSONResponse(content={"message": "Logged out"})
     response.delete_cookie(key="session_token", path="/")
+    response.delete_cookie(key="admin_token", path="/")
     return response
 
 # =============================================================================
-# LISTING ROUTES
+# ADMIN AUTH ROUTES
 # =============================================================================
+
+async def get_current_admin(request: Request) -> Optional[dict]:
+    """Get current admin from admin_token cookie or header"""
+    admin_token = request.cookies.get("admin_token")
+    if not admin_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            admin_token = auth_header.split(" ")[1]
+    
+    if not admin_token:
+        return None
+    
+    session = await db.admin_sessions.find_one({"session_token": admin_token}, {"_id": 0})
+    if not session:
+        return None
+    
+    # Check expiration
+    expires_at = session["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        return None
+    
+    admin = await db.admins.find_one({"admin_id": session["admin_id"]}, {"_id": 0, "password_hash": 0})
+    return admin
+
+async def require_admin(request: Request) -> dict:
+    """Require authenticated admin"""
+    admin = await get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="Admin authentication required")
+    return admin
+
+@api_router.post("/admin/auth/login")
+async def admin_login(credentials: AdminLogin):
+    """Admin login with email and password"""
+    admin = await db.admins.find_one({"email": credentials.email.lower()})
+    
+    if not admin:
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+    
+    if not verify_password(credentials.password, admin["password_hash"]):
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+    
+    # Generate session token
+    session_token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=12)
+    
+    session_doc = {
+        "admin_id": admin["admin_id"],
+        "session_token": session_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.admin_sessions.insert_one(session_doc)
+    
+    # Return admin data without password
+    admin_data = {
+        "admin_id": admin["admin_id"],
+        "email": admin["email"],
+        "name": admin["name"],
+        "role": admin.get("role", "admin"),
+        "must_change_password": admin.get("must_change_password", False)
+    }
+    
+    response = JSONResponse(content=admin_data)
+    response.set_cookie(
+        key="admin_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=12 * 60 * 60  # 12 hours
+    )
+    return response
+
+@api_router.get("/admin/auth/me")
+async def get_current_admin_route(request: Request):
+    """Get current authenticated admin"""
+    admin = await get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="Not authenticated as admin")
+    return admin
+
+@api_router.post("/admin/auth/logout")
+async def admin_logout(request: Request):
+    """Admin logout"""
+    admin_token = request.cookies.get("admin_token")
+    if admin_token:
+        await db.admin_sessions.delete_one({"session_token": admin_token})
+    
+    response = JSONResponse(content={"message": "Admin logged out"})
+    response.delete_cookie(key="admin_token", path="/")
+    return response
+
+@api_router.post("/admin/auth/change-password")
+async def admin_change_password(data: AdminChangePassword, request: Request):
+    """Change admin password"""
+    admin = await require_admin(request)
+    
+    # Get admin with password hash
+    admin_full = await db.admins.find_one({"admin_id": admin["admin_id"]})
+    
+    if not verify_password(data.current_password, admin_full["password_hash"]):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta")
+    
+    # Validate new password
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Nova senha deve ter pelo menos 8 caracteres")
+    
+    # Update password
+    new_hash = hash_password(data.new_password)
+    await db.admins.update_one(
+        {"admin_id": admin["admin_id"]},
+        {"$set": {"password_hash": new_hash, "must_change_password": False}}
+    )
+    
+    return {"message": "Senha alterada com sucesso"}
+
+@api_router.post("/admin/auth/create-admin")
+async def create_admin(data: AdminCreate, request: Request):
+    """Create new admin (requires existing admin)"""
+    await require_admin(request)
+    
+    # Check if email already exists
+    existing = await db.admins.find_one({"email": data.email.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email já cadastrado")
+    
+    admin_id = f"admin_{uuid.uuid4().hex[:12]}"
+    admin_doc = {
+        "admin_id": admin_id,
+        "email": data.email.lower(),
+        "name": data.name,
+        "password_hash": hash_password(data.password),
+        "role": "admin",
+        "must_change_password": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.admins.insert_one(admin_doc)
+    
+    return {"message": "Admin criado com sucesso", "admin_id": admin_id}
+
+@api_router.post("/admin/promote-user")
+async def promote_user_to_admin(data: PromoteToAdmin, request: Request):
+    """Promote a regular user to have admin-like privileges in users collection"""
+    await require_admin(request)
+    
+    user = await db.users.find_one({"email": data.user_email.lower()}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    await db.users.update_one(
+        {"email": data.user_email.lower()},
+        {"$set": {"is_admin": True}}
+    )
+    
+    return {"message": f"Usuário {user['name']} promovido com sucesso"}
+
+@api_router.get("/admin/users")
+async def list_users(request: Request):
+    """List all users (admin only)"""
+    await require_admin(request)
+    
+    users = await db.users.find({}, {"_id": 0}).to_list(500)
+    return users
 
 @api_router.get("/listings")
 async def get_listings(
@@ -696,6 +905,24 @@ async def startup():
     await db.listings.create_index([("city", 1)])
     await db.users.create_index([("email", 1)], unique=True)
     await db.user_sessions.create_index([("session_token", 1)], unique=True)
+    await db.admins.create_index([("email", 1)], unique=True)
+    await db.admin_sessions.create_index([("session_token", 1)], unique=True)
+    
+    # Create default admin if not exists
+    default_admin = await db.admins.find_one({"email": "admin@tratorshop.com"})
+    if not default_admin:
+        admin_doc = {
+            "admin_id": f"admin_{uuid.uuid4().hex[:12]}",
+            "email": "admin@tratorshop.com",
+            "name": "Administrador",
+            "password_hash": hash_password("Admin@123"),
+            "role": "super_admin",
+            "must_change_password": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.admins.insert_one(admin_doc)
+        logger.info("Default admin account created: admin@tratorshop.com")
+    
     logger.info("Database indexes created")
 
 @app.on_event("shutdown")

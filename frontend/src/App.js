@@ -7,7 +7,7 @@ import {
   Search, Menu, X, MapPin, Phone, ChevronRight, Star, Eye, Clock, 
   Plus, LogOut, User, Settings, Tractor, Wrench, Cog, Loader2,
   ChevronLeft, MessageCircle, Share2, Heart, Filter, Grid, List,
-  Upload, Image as ImageIcon, Trash2, Edit, Camera
+  Upload, Image as ImageIcon, Trash2, Edit, Camera, Shield, Lock, Mail
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,64 @@ L.Icon.Default.mergeOptions({
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// Admin Auth Context
+const AdminAuthContext = createContext(null);
+
+export const useAdminAuth = () => useContext(AdminAuthContext);
+
+const AdminAuthProvider = ({ children }) => {
+  const [admin, setAdmin] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const checkAdminAuth = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API}/admin/auth/me`, { withCredentials: true });
+      setAdmin(response.data);
+    } catch (error) {
+      setAdmin(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAdminAuth();
+  }, [checkAdminAuth]);
+
+  const adminLogin = async (email, password) => {
+    const response = await axios.post(
+      `${API}/admin/auth/login`,
+      { email, password },
+      { withCredentials: true }
+    );
+    setAdmin(response.data);
+    return response.data;
+  };
+
+  const adminLogout = async () => {
+    try {
+      await axios.post(`${API}/admin/auth/logout`, {}, { withCredentials: true });
+      setAdmin(null);
+    } catch (error) {
+      console.error("Admin logout error:", error);
+    }
+  };
+
+  return (
+    <AdminAuthContext.Provider value={{ admin, loading, adminLogin, adminLogout, checkAdminAuth, setAdmin }}>
+      {children}
+    </AdminAuthContext.Provider>
+  );
+};
+
+// Fix Leaflet default marker icon
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
 
 // MS Cities coordinates for map
 const MS_CITY_COORDS = {
@@ -1778,21 +1836,248 @@ const DashboardPage = () => {
   );
 };
 
-// Admin Page
-const AdminPage = () => {
-  const { user } = useAuth();
+// Admin Login Page
+const AdminLoginPage = () => {
+  const { admin, adminLogin } = useAdminAuth();
   const navigate = useNavigate();
-  const [listings, setListings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('pending');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (!user?.is_admin) {
-      navigate('/');
+    if (admin) {
+      navigate('/admin');
+    }
+  }, [admin, navigate]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const adminData = await adminLogin(email, password);
+      toast.success(`Bem-vindo, ${adminData.name}!`);
+      
+      if (adminData.must_change_password) {
+        navigate('/admin/change-password');
+      } else {
+        navigate('/admin');
+      }
+    } catch (error) {
+      console.error("Admin login error:", error);
+      toast.error(error.response?.data?.detail || "Credenciais inválidas");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center py-12 px-4" data-testid="admin-login-page">
+      <SEOHead title="Admin Login" />
+      
+      <Card className="w-full max-w-md border-slate-700 bg-slate-800">
+        <CardHeader className="text-center">
+          <div className="w-16 h-16 bg-[#1A4D2E] rounded-xl flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'Outfit' }}>
+            Área Administrativa
+          </h1>
+          <p className="text-slate-400">
+            Acesso restrito para administradores
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="admin-email" className="text-slate-300">Email</Label>
+              <div className="relative mt-1">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                <Input
+                  id="admin-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@tratorshop.com"
+                  className="pl-10 bg-slate-700 border-slate-600 text-white placeholder:text-slate-500"
+                  data-testid="admin-email-input"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="admin-password" className="text-slate-300">Senha</Label>
+              <div className="relative mt-1">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                <Input
+                  id="admin-password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="pl-10 bg-slate-700 border-slate-600 text-white placeholder:text-slate-500"
+                  data-testid="admin-password-input"
+                />
+              </div>
+            </div>
+
+            <Button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#1A4D2E] hover:bg-[#143d24] text-white py-6"
+              data-testid="admin-login-button"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Shield className="w-5 h-5 mr-2" />}
+              Entrar como Admin
+            </Button>
+          </form>
+          
+          <div className="mt-6 pt-6 border-t border-slate-700 text-center">
+            <Link to="/" className="text-slate-400 hover:text-white text-sm">
+              Voltar para o site
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// Admin Change Password Page
+const AdminChangePasswordPage = () => {
+  const { admin, adminLogout } = useAdminAuth();
+  const navigate = useNavigate();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!admin) {
+      navigate('/admin-login');
+    }
+  }, [admin, navigate]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (newPassword !== confirmPassword) {
+      toast.error("As senhas não coincidem");
+      return;
+    }
+    
+    if (newPassword.length < 8) {
+      toast.error("A nova senha deve ter pelo menos 8 caracteres");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await axios.post(
+        `${API}/admin/auth/change-password`,
+        { current_password: currentPassword, new_password: newPassword },
+        { withCredentials: true }
+      );
+      toast.success("Senha alterada com sucesso!");
+      navigate('/admin');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao alterar senha");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!admin) return null;
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center py-12 px-4">
+      <SEOHead title="Alterar Senha" />
+      
+      <Card className="w-full max-w-md border-slate-700 bg-slate-800">
+        <CardHeader className="text-center">
+          <div className="w-16 h-16 bg-amber-500 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'Outfit' }}>
+            Alterar Senha
+          </h1>
+          <p className="text-slate-400">
+            Você precisa alterar sua senha temporária
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label className="text-slate-300">Senha Atual</Label>
+              <Input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="mt-1 bg-slate-700 border-slate-600 text-white"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-slate-300">Nova Senha</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="mt-1 bg-slate-700 border-slate-600 text-white"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-slate-300">Confirmar Nova Senha</Label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="mt-1 bg-slate-700 border-slate-600 text-white"
+              />
+            </div>
+
+            <Button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#1A4D2E] hover:bg-[#143d24] text-white py-6"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+              Alterar Senha
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// Admin Page
+const AdminPage = () => {
+  const { admin, adminLogout } = useAdminAuth();
+  const navigate = useNavigate();
+  const [listings, setListings] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('pending');
+  const [activeTab, setActiveTab] = useState('listings');
+
+  useEffect(() => {
+    if (!admin) {
+      navigate('/admin-login');
+      return;
+    }
+    if (admin.must_change_password) {
+      navigate('/admin/change-password');
       return;
     }
     fetchListings();
-  }, [user, navigate, filter]);
+  }, [admin, navigate, filter]);
 
   const fetchListings = async () => {
     setLoading(true);
@@ -1801,11 +2086,29 @@ const AdminPage = () => {
       setListings(res.data);
     } catch (error) {
       console.error("Error fetching listings:", error);
+      if (error.response?.status === 401) {
+        navigate('/admin-login');
+      }
       toast.error("Erro ao carregar anúncios");
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get(`${API}/admin/users`, { withCredentials: true });
+      setUsers(res.data);
+    } catch (error) {
+      toast.error("Erro ao carregar usuários");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'users') {
+      fetchUsers();
+    }
+  }, [activeTab]);
 
   const handleApprove = async (listingId) => {
     try {
@@ -1837,6 +2140,12 @@ const AdminPage = () => {
     }
   };
 
+  const handleLogout = async () => {
+    await adminLogout();
+    toast.success("Logout realizado");
+    navigate('/admin-login');
+  };
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -1845,113 +2154,196 @@ const AdminPage = () => {
     }).format(price);
   };
 
-  if (!user?.is_admin) return null;
+  if (!admin) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8" data-testid="admin-page">
+    <div className="min-h-screen bg-slate-900" data-testid="admin-page">
       <SEOHead title="Painel Admin" />
       
-      <div className="max-w-6xl mx-auto px-4 md:px-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-8" style={{ fontFamily: 'Outfit' }}>
+      {/* Admin Header */}
+      <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 md:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[#1A4D2E] rounded-lg flex items-center justify-center">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <span className="font-bold text-white" style={{ fontFamily: 'Outfit' }}>
+                  TratorShop Admin
+                </span>
+                <p className="text-xs text-slate-400">{admin.email}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <Link to="/" className="text-slate-400 hover:text-white text-sm">
+                Ver Site
+              </Link>
+              <Button 
+                variant="ghost" 
+                onClick={handleLogout}
+                className="text-slate-400 hover:text-white hover:bg-slate-700"
+                data-testid="admin-logout"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Sair
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+      
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+        <h1 className="text-2xl md:text-3xl font-bold text-white mb-8" style={{ fontFamily: 'Outfit' }}>
           Painel Administrativo
         </h1>
 
-        <Tabs value={filter} onValueChange={setFilter}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="pending" data-testid="tab-pending">
-              Pendentes
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="bg-slate-800">
+            <TabsTrigger value="listings" className="data-[state=active]:bg-[#1A4D2E]">
+              Anúncios
             </TabsTrigger>
-            <TabsTrigger value="approved" data-testid="tab-approved">
-              Aprovados
-            </TabsTrigger>
-            <TabsTrigger value="rejected" data-testid="tab-rejected">
-              Rejeitados
+            <TabsTrigger value="users" className="data-[state=active]:bg-[#1A4D2E]">
+              Usuários
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value={filter}>
-            {loading ? (
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-32 rounded-xl" />
-                ))}
-              </div>
-            ) : listings.length > 0 ? (
-              <div className="space-y-4">
-                {listings.map(listing => (
-                  <Card key={listing.listing_id} className="overflow-hidden">
-                    <div className="flex flex-col md:flex-row">
-                      <div className="md:w-48 h-32 bg-slate-100">
-                        {listing.images?.[0] ? (
-                          <img 
-                            src={`${API}/files/${listing.images[0]}`}
-                            alt={listing.title}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Tractor className="w-12 h-12 text-slate-300" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 p-4">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="font-semibold text-lg">{listing.title}</h3>
-                            <p className="text-[#1A4D2E] font-bold">{formatPrice(listing.price)}</p>
-                            <p className="text-sm text-slate-500">
-                              {listing.city} • Por: {listing.seller?.name || 'N/A'} ({listing.seller?.email})
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              Criado em: {new Date(listing.created_at).toLocaleDateString('pt-BR')}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            {listing.status === 'pending' && (
-                              <>
-                                <Button 
-                                  size="sm"
-                                  onClick={() => handleApprove(listing.listing_id)}
-                                  className="bg-green-600 hover:bg-green-700"
-                                  data-testid={`approve-${listing.listing_id}`}
-                                >
-                                  Aprovar
-                                </Button>
-                                <Button 
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleReject(listing.listing_id)}
-                                  className="text-red-600 border-red-200 hover:bg-red-50"
-                                  data-testid={`reject-${listing.listing_id}`}
-                                >
-                                  Rejeitar
-                                </Button>
-                              </>
+          <TabsContent value="listings">
+            <Tabs value={filter} onValueChange={setFilter}>
+              <TabsList className="mb-6 bg-slate-800">
+                <TabsTrigger value="pending" className="data-[state=active]:bg-amber-600" data-testid="tab-pending">
+                  Pendentes
+                </TabsTrigger>
+                <TabsTrigger value="approved" className="data-[state=active]:bg-green-600" data-testid="tab-approved">
+                  Aprovados
+                </TabsTrigger>
+                <TabsTrigger value="rejected" className="data-[state=active]:bg-red-600" data-testid="tab-rejected">
+                  Rejeitados
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value={filter}>
+                {loading ? (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} className="h-32 rounded-xl bg-slate-800" />
+                    ))}
+                  </div>
+                ) : listings.length > 0 ? (
+                  <div className="space-y-4">
+                    {listings.map(listing => (
+                      <Card key={listing.listing_id} className="overflow-hidden bg-slate-800 border-slate-700">
+                        <div className="flex flex-col md:flex-row">
+                          <div className="md:w-48 h-32 bg-slate-700">
+                            {listing.images?.[0] ? (
+                              <img 
+                                src={`${API}/files/${listing.images[0]}`}
+                                alt={listing.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Tractor className="w-12 h-12 text-slate-500" />
+                              </div>
                             )}
-                            {listing.status === 'approved' && (
-                              <Button 
-                                size="sm"
-                                variant={listing.is_featured ? "outline" : "default"}
-                                onClick={() => handleFeature(listing.listing_id, !listing.is_featured)}
-                                className={listing.is_featured ? "" : "bg-[#F9C02D] hover:bg-[#f5b00b] text-[#1A4D2E]"}
-                                data-testid={`feature-${listing.listing_id}`}
-                              >
-                                <Star className={`w-4 h-4 mr-1 ${listing.is_featured ? 'fill-current' : ''}`} />
-                                {listing.is_featured ? 'Remover Destaque' : 'Destacar'}
-                              </Button>
-                            )}
+                          </div>
+                          <div className="flex-1 p-4">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h3 className="font-semibold text-lg text-white">{listing.title}</h3>
+                                <p className="text-[#F9C02D] font-bold">{formatPrice(listing.price)}</p>
+                                <p className="text-sm text-slate-400">
+                                  {listing.city} • Por: {listing.seller?.name || 'N/A'} ({listing.seller?.email})
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                  Criado em: {new Date(listing.created_at).toLocaleDateString('pt-BR')}
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                {listing.status === 'pending' && (
+                                  <>
+                                    <Button 
+                                      size="sm"
+                                      onClick={() => handleApprove(listing.listing_id)}
+                                      className="bg-green-600 hover:bg-green-700"
+                                      data-testid={`approve-${listing.listing_id}`}
+                                    >
+                                      Aprovar
+                                    </Button>
+                                    <Button 
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleReject(listing.listing_id)}
+                                      className="text-red-400 border-red-700 hover:bg-red-900/50"
+                                      data-testid={`reject-${listing.listing_id}`}
+                                    >
+                                      Rejeitar
+                                    </Button>
+                                  </>
+                                )}
+                                {listing.status === 'approved' && (
+                                  <Button 
+                                    size="sm"
+                                    variant={listing.is_featured ? "outline" : "default"}
+                                    onClick={() => handleFeature(listing.listing_id, !listing.is_featured)}
+                                    className={listing.is_featured ? "border-[#F9C02D] text-[#F9C02D]" : "bg-[#F9C02D] hover:bg-[#f5b00b] text-[#1A4D2E]"}
+                                    data-testid={`feature-${listing.listing_id}`}
+                                  >
+                                    <Star className={`w-4 h-4 mr-1 ${listing.is_featured ? 'fill-current' : ''}`} />
+                                    {listing.is_featured ? 'Remover Destaque' : 'Destacar'}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="p-12 text-center bg-slate-800 border-slate-700">
+                    <p className="text-slate-400">Nenhum anúncio {filter === 'pending' ? 'pendente' : filter === 'approved' ? 'aprovado' : 'rejeitado'}</p>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          <TabsContent value="users">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <h2 className="text-lg font-semibold text-white">Usuários Registrados</h2>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {users.map(user => (
+                    <div key={user.user_id} className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={user.picture} />
+                          <AvatarFallback className="bg-[#1A4D2E] text-white">
+                            {user.name?.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium text-white">{user.name}</p>
+                          <p className="text-sm text-slate-400">{user.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {user.is_admin && (
+                          <Badge className="bg-[#1A4D2E]">Admin</Badge>
+                        )}
+                        <span className="text-xs text-slate-500">
+                          {new Date(user.created_at).toLocaleDateString('pt-BR')}
+                        </span>
                       </div>
                     </div>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Card className="p-12 text-center">
-                <p className="text-slate-500">Nenhum anúncio {filter === 'pending' ? 'pendente' : filter === 'approved' ? 'aprovado' : 'rejeitado'}</p>
-              </Card>
-            )}
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -2014,6 +2406,17 @@ const AppRouter = () => {
     return <AuthCallback />;
   }
 
+  // Admin routes without header/footer
+  if (location.pathname === '/admin-login' || location.pathname.startsWith('/admin')) {
+    return (
+      <Routes>
+        <Route path="/admin-login" element={<AdminLoginPage />} />
+        <Route path="/admin/change-password" element={<AdminChangePasswordPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+      </Routes>
+    );
+  }
+
   return (
     <>
       <Header />
@@ -2025,7 +2428,6 @@ const AppRouter = () => {
           <Route path="/anunciar" element={<ListingFormPage />} />
           <Route path="/editar/:id" element={<ListingFormPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/admin" element={<AdminPage />} />
           <Route path="/login" element={<LoginPage />} />
         </Routes>
       </main>
@@ -2038,8 +2440,10 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Toaster position="top-center" richColors />
-        <AppRouter />
+        <AdminAuthProvider>
+          <Toaster position="top-center" richColors />
+          <AppRouter />
+        </AdminAuthProvider>
       </AuthProvider>
     </BrowserRouter>
   );

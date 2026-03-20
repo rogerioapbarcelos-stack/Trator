@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-03-20T04:53:46.634061",
-  "total_tests": 16,
-  "passed_tests": 15,
+  "timestamp": "2026-03-20T05:22:11.100927",
+  "total_tests": 24,
+  "passed_tests": 23,
   "failed_tests": 1,
-  "success_rate": 93.75,
+  "success_rate": 95.83333333333334,
   "detailed_results": [
     {
       "test": "GET /api/",
@@ -69,6 +69,38 @@
     },
     {
       "test": "GET /api/listings/{id} (SEO data)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/admin/auth/login (correct credentials)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/admin/auth/login (wrong credentials)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/admin/auth/login (non-existent admin)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/admin/auth/me (no token)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/admin/auth/me (with token)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/admin/listings (with token)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/admin/users (with token)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/admin/auth/logout",
       "status": "PASSED"
     }
   ]

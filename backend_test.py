@@ -347,6 +347,148 @@ class TratorShopAPITester:
         else:
             print("\n✅ All tests passed!")
 
+    def test_admin_login_api(self):
+        """Test admin login API with correct credentials"""
+        try:
+            admin_credentials = {
+                "email": "admin@tratorshop.com",
+                "password": "Admin@123"
+            }
+            response = requests.post(f"{self.api_url}/admin/auth/login", json=admin_credentials)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = "admin_id" in data and "email" in data
+                # Check if admin_token cookie is set
+                if 'set-cookie' in response.headers:
+                    cookies = response.headers['set-cookie']
+                    success = success and 'admin_token=' in cookies
+            self.log_test("POST /api/admin/auth/login (correct credentials)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/admin/auth/login (correct credentials)", False, None, str(e))
+            return False
+
+    def test_admin_login_api_wrong_credentials(self):
+        """Test admin login API with wrong credentials"""
+        try:
+            wrong_credentials = {
+                "email": "admin@tratorshop.com",
+                "password": "WrongPassword123"
+            }
+            response = requests.post(f"{self.api_url}/admin/auth/login", json=wrong_credentials)
+            success = response.status_code == 401
+            self.log_test("POST /api/admin/auth/login (wrong credentials)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/admin/auth/login (wrong credentials)", False, None, str(e))
+            return False
+
+    def test_admin_login_api_nonexistent_user(self):
+        """Test admin login API with non-existent admin"""
+        try:
+            fake_credentials = {
+                "email": "fake@admin.com",
+                "password": "SomePassword"
+            }
+            response = requests.post(f"{self.api_url}/admin/auth/login", json=fake_credentials)
+            success = response.status_code == 401
+            self.log_test("POST /api/admin/auth/login (non-existent admin)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/admin/auth/login (non-existent admin)", False, None, str(e))
+            return False
+
+    def test_admin_auth_me_without_token(self):
+        """Test admin auth/me without token (should return 401)"""
+        try:
+            response = requests.get(f"{self.api_url}/admin/auth/me")
+            success = response.status_code == 401
+            self.log_test("GET /api/admin/auth/me (no token)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("GET /api/admin/auth/me (no token)", False, None, str(e))
+            return False
+
+    def test_admin_endpoints_with_valid_token(self):
+        """Test admin endpoints with valid admin token"""
+        # First login as admin
+        try:
+            admin_credentials = {
+                "email": "admin@tratorshop.com", 
+                "password": "Admin@123"
+            }
+            login_response = requests.post(f"{self.api_url}/admin/auth/login", json=admin_credentials)
+            if login_response.status_code != 200:
+                self.log_test("Admin token setup for protected tests", False, login_response.status_code, "Failed to get admin token")
+                return
+            
+            # Extract admin_token from cookies
+            admin_token = None
+            if 'set-cookie' in login_response.headers:
+                cookies = login_response.headers['set-cookie']
+                for cookie in cookies.split(';'):
+                    if 'admin_token=' in cookie:
+                        admin_token = cookie.split('admin_token=')[1].split(';')[0]
+                        break
+            
+            if not admin_token:
+                self.log_test("Admin token extraction", False, None, "Could not extract admin_token")
+                return
+            
+            # Test admin/auth/me with token
+            headers = {"Cookie": f"admin_token={admin_token}"}
+            
+            response = requests.get(f"{self.api_url}/admin/auth/me", headers=headers)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = "admin_id" in data and "email" in data and data["email"] == "admin@tratorshop.com"
+            self.log_test("GET /api/admin/auth/me (with token)", success, response.status_code)
+            
+            # Test admin/listings endpoint
+            response = requests.get(f"{self.api_url}/admin/listings", headers=headers)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = isinstance(data, list)  # Should return list of listings
+            self.log_test("GET /api/admin/listings (with token)", success, response.status_code)
+            
+            # Test admin/users endpoint  
+            response = requests.get(f"{self.api_url}/admin/users", headers=headers)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = isinstance(data, list)  # Should return list of users
+            self.log_test("GET /api/admin/users (with token)", success, response.status_code)
+            
+            # Test admin logout
+            response = requests.post(f"{self.api_url}/admin/auth/logout", headers=headers)
+            success = response.status_code == 200
+            self.log_test("POST /api/admin/auth/logout", success, response.status_code)
+            
+        except Exception as e:
+            self.log_test("Admin protected endpoints tests", False, None, str(e))
+
+    def run_admin_auth_tests(self):
+        """Run all admin authentication tests"""
+        print("\n🔐 Testing Admin Authentication System...")
+        
+        self.test_admin_login_api()
+        sleep(0.1)
+        
+        self.test_admin_login_api_wrong_credentials()
+        sleep(0.1)
+        
+        self.test_admin_login_api_nonexistent_user()
+        sleep(0.1)
+        
+        self.test_admin_auth_me_without_token()
+        sleep(0.1)
+        
+        self.test_admin_endpoints_with_valid_token()
+        sleep(0.1)
+
     def get_test_results_dict(self):
         """Return test results as dictionary for JSON export"""
         return {
@@ -364,6 +506,7 @@ def main():
     try:
         tester.run_public_api_tests()
         tester.run_authenticated_tests()
+        tester.run_admin_auth_tests()  # Add admin authentication tests
         tester.print_summary()
         
         # Save results to JSON
