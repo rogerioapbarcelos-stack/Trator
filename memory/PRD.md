@@ -25,9 +25,9 @@ Create a modern marketplace website called TratorShop - a classified marketplace
 - WhatsApp click tracking
 - Mobile-first, SEO optimized
 
-## What's Been Implemented (MVP - 2026-03-20)
+## What's Been Implemented
 
-### Backend (FastAPI + MongoDB)
+### Phase 1: MVP (2026-03-20)
 - ✅ User authentication via Emergent Google OAuth
 - ✅ Session management with cookies
 - ✅ Listing CRUD operations
@@ -36,53 +36,50 @@ Create a modern marketplace website called TratorShop - a classified marketplace
 - ✅ 90-day auto-expiration check
 - ✅ WhatsApp click tracking
 - ✅ Object Storage integration for images
-- ✅ MS cities endpoint
-- ✅ Categories endpoint
-- ✅ Marketplace stats
-
-### Frontend (React)
 - ✅ Homepage with hero, search, categories, featured/recent listings
-- ✅ Search page with filters (category, city, text)
-- ✅ Listing detail page with specs, images, WhatsApp button
-- ✅ User dashboard (manage listings)
-- ✅ Admin panel (approve/reject/feature)
-- ✅ Create listing form
-- ✅ Google OAuth login flow
+- ✅ Search page with filters
+- ✅ Listing detail page
+- ✅ User dashboard
+- ✅ Admin panel
 - ✅ Mobile responsive design
-- ✅ Outfit + Inter typography
-- ✅ Green (#1A4D2E) + Gold (#F9C02D) color palette
+
+### Phase 2: MVP Optimization (2026-03-20)
+- ✅ **Image Upload UI** - Integrated image uploader in create/edit listing forms
+- ✅ **Edit Listing** - Full edit functionality with existing data preloaded
+- ✅ **Leaflet Maps** - Interactive OpenStreetMap on listing detail pages
+- ✅ **SEO Meta Tags** - Dynamic meta tags for all pages (title, description, og:*, twitter:*)
+- ✅ **Base HTML SEO** - Server-rendered meta tags for crawlers
+- ✅ **SEOHead Component** - Reusable component for page-specific meta tags
 
 ## Tech Stack
-- **Frontend:** React 19, TailwindCSS, Shadcn/UI, React Router v7
+- **Frontend:** React 19, TailwindCSS, Shadcn/UI, React Router v7, React-Leaflet
 - **Backend:** FastAPI, Motor (MongoDB async)
 - **Database:** MongoDB
 - **Auth:** Emergent Google OAuth
 - **Storage:** Emergent Object Storage
-- **Maps:** OpenStreetMap/Leaflet (ready for integration)
+- **Maps:** OpenStreetMap via Leaflet
 
 ## Prioritized Backlog
 
 ### P0 (Critical - Next Sprint)
-- [ ] Image upload UI on create listing form
-- [ ] Edit listing functionality
 - [ ] Email notifications for approval/rejection
+- [ ] Image reordering (drag-drop)
+- [ ] Listing renewal before expiration
 
 ### P1 (High Priority)
-- [ ] Leaflet map integration on listing detail
-- [ ] SEO meta tags per page
-- [ ] Sitemap generation
-- [ ] Listing expiration notifications
+- [ ] Sitemap.xml generation
+- [ ] robots.txt optimization
+- [ ] Image compression/optimization
+- [ ] Lazy loading for images
 
 ### P2 (Medium Priority)
 - [ ] User profile page
 - [ ] Favorite/save listings
-- [ ] Listing renewal option
 - [ ] Advanced filters (price range, year, hours)
 - [ ] Share listing on social media
 
 ### P3 (Low Priority)
 - [ ] Seller ratings/reviews
-- [ ] Multiple image gallery with drag-drop reorder
 - [ ] SMS notifications (Twilio)
 - [ ] Analytics dashboard for sellers
 
@@ -111,9 +108,15 @@ Create a modern marketplace website called TratorShop - a classified marketplace
 | POST | /api/admin/listings/{id}/reject | Admin | Reject |
 | POST | /api/admin/listings/{id}/feature | Admin | Toggle featured |
 
+## SEO Implementation
+- Base meta tags in index.html (for crawlers)
+- Dynamic meta tags via SEOHead component
+- Per-listing SEO with title, price, location, image
+- Search page SEO based on filters
+- Clean URL structure (/anuncio/{id}, /buscar, /dashboard)
+
 ## Next Actions
-1. Implement image upload UI in create listing form
-2. Add edit listing functionality
-3. Integrate Leaflet map on listing detail page
-4. Add SEO meta tags
-5. Create admin notification system
+1. Implement email notifications for listing status changes
+2. Add image reordering functionality
+3. Generate sitemap.xml for better SEO
+4. Optimize images with compression
