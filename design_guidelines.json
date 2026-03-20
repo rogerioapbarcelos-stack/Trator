@@ -1,0 +1,195 @@
+{
+  "project_metadata": {
+    "name": "TratorShop",
+    "description": "Premium Agricultural Marketplace for Mato Grosso do Sul",
+    "identity": "Modern Agritech - Clean, Trustworthy, High-Performance",
+    "target_audience": "Farmers, Equipment Dealers, Rural Entrepreneurs",
+    "primary_theme": "light"
+  },
+  "design_philosophy": {
+    "core_principle": "Fusion over Imitation: Combine the reliability of John Deere aesthetics with the fluidity of modern fintech apps.",
+    "emotional_goal": "Trust, Efficiency, Growth",
+    "visual_style": "Minimalist Agritech",
+    "unconventional_decisions": [
+      "No generic 'Bootstrap' grids - use Bento layouts for categories",
+      "No 'default green' - use deep Forest Green and vivid Harvest Gold",
+      "Map-first exploration for listing details"
+    ]
+  },
+  "colors": {
+    "palette_name": "Cerrado Harvest",
+    "primary": {
+      "name": "Forest Deep",
+      "hex": "#1A4D2E",
+      "tailwind": "bg-[#1A4D2E] text-white",
+      "usage": "Primary Buttons, Header, Active States, Brand Identity"
+    },
+    "secondary": {
+      "name": "Harvest Gold",
+      "hex": "#F9C02D",
+      "tailwind": "bg-[#F9C02D] text-[#1A4D2E]",
+      "usage": "Call to Actions (CTA), Highlights, Badges, 'New' tags"
+    },
+    "accent": {
+      "name": "Morning Sky",
+      "hex": "#F1F5F9",
+      "tailwind": "bg-slate-100",
+      "usage": "Backgrounds, Cards, Secondary Sections"
+    },
+    "neutral": {
+      "base": "#FFFFFF",
+      "text_primary": "#0F172A",
+      "text_secondary": "#475569",
+      "border": "#E2E8F0"
+    },
+    "semantic": {
+      "success": "#16A34A",
+      "warning": "#D97706",
+      "error": "#DC2626",
+      "whatsapp": "#25D366"
+    },
+    "gradients": {
+      "hero_overlay": "linear-gradient(180deg, rgba(26, 77, 46, 0.9) 0%, rgba(26, 77, 46, 0.4) 100%)",
+      "card_hover": "linear-gradient(45deg, rgba(249, 192, 45, 0.05) 0%, rgba(249, 192, 45, 0) 100%)"
+    }
+  },
+  "typography": {
+    "font_family": {
+      "headings": {
+        "name": "Outfit",
+        "weights": ["500", "700"],
+        "usage": "H1, H2, H3, Section Titles, Price Tags"
+      },
+      "body": {
+        "name": "Inter",
+        "weights": ["400", "500", "600"],
+        "usage": "Paragraphs, UI Labels, Inputs, Descriptions"
+      },
+      "mono": {
+        "name": "JetBrains Mono",
+        "weights": ["400"],
+        "usage": "Technical Specs, VIN numbers, SKUs"
+      }
+    },
+    "scaling": {
+      "h1": "text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+      "h3": "text-2xl font-medium",
+      "body_lg": "text-lg leading-relaxed",
+      "body_base": "text-base leading-relaxed text-slate-600",
+      "caption": "text-sm text-slate-500 uppercase tracking-wider"
+    },
+    "rules": [
+      "Never use Inter for Headings (H1-H3)",
+      "Use 'tracking-tight' for all headings larger than 24px",
+      "Price text should be prominent and use the Heading font"
+    ]
+  },
+  "visual_enhancers": {
+    "radius": {
+      "default": "rounded-lg",
+      "buttons": "rounded-md",
+      "cards": "rounded-xl"
+    },
+    "shadows": {
+      "card": "shadow-[0_2px_8px_rgba(0,0,0,0.08)]",
+      "card_hover": "shadow-[0_12px_24px_rgba(26,77,46,0.12)]",
+      "dropdown": "shadow-xl border border-slate-100"
+    },
+    "borders": {
+      "default": "border border-slate-200",
+      "active": "border-green-600 ring-1 ring-green-600",
+      "subtle": "border-b border-slate-100"
+    },
+    "textures": {
+      "grain": "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E\")"
+    }
+  },
+  "layout_strategies": {
+    "container": {
+      "max_width": "max-w-7xl",
+      "padding": "px-4 md:px-8 lg:px-12",
+      "center": "mx-auto"
+    },
+    "spacing": {
+      "section_gap": "py-16 md:py-24",
+      "element_gap": "gap-6 md:gap-8"
+    },
+    "bento_grid": {
+      "wrapper": "grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-4 md:gap-6",
+      "hero_item": "col-span-full md:col-span-2 lg:col-span-6 row-span-2",
+      "standard_item": "col-span-1 md:col-span-2 lg:col-span-3",
+      "tall_item": "col-span-1 md:col-span-1 lg:col-span-3 row-span-2"
+    },
+    "mobile_first": true
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#1A4D2E] hover:bg-[#143d24] text-white font-medium px-6 py-3 rounded-md transition-all shadow-sm hover:shadow-md",
+      "secondary": "bg-[#F9C02D] hover:bg-[#f5b00b] text-[#1A4D2E] font-bold px-6 py-3 rounded-md transition-all",
+      "outline": "border-2 border-[#1A4D2E] text-[#1A4D2E] hover:bg-[#1A4D2E]/5 font-medium px-6 py-3 rounded-md",
+      "whatsapp": "bg-[#25D366] hover:bg-[#1ebd59] text-white font-bold flex items-center gap-2 px-6 py-3 rounded-md shadow-md"
+    },
+    "cards": {
+      "listing": "bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-green-600/50 transition-all duration-300 group",
+      "category": "relative overflow-hidden rounded-xl aspect-[4/3] group cursor-pointer"
+    },
+    "inputs": {
+      "search": "h-12 pl-12 pr-4 rounded-full border-slate-200 focus:border-green-600 focus:ring-green-600/20 shadow-sm",
+      "form": "h-11 rounded-md border-slate-200 focus:border-green-600 focus:ring-green-600/20"
+    }
+  },
+  "media": {
+    "image_style": "object-cover w-full h-full transition-transform duration-500 group-hover:scale-105",
+    "categories": [
+      {
+        "name": "Tractors",
+        "url": "https://images.unsplash.com/photo-1758533696874-587c4e62940c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHw0fHxtb2Rlcm4lMjBncmVlbiUyMHRyYWN0b3IlMjBpbiUyMGZpZWxkfGVufDB8fHx8MTc3Mzk3OTg5MXww&ixlib=rb-4.1.0&q=85",
+        "alt": "Modern green tractor harvesting"
+      },
+      {
+        "name": "Harvesters",
+        "url": "https://images.pexels.com/photos/6680160/pexels-photo-6680160.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "alt": "Combine harvester in golden field"
+      },
+      {
+        "name": "Implements",
+        "url": "https://images.unsplash.com/photo-1764277434161-23d72931335f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NjV8MHwxfHNlYXJjaHwyfHxhZ3JpY3VsdHVyYWwlMjBwbG93JTIwZXF1aXBtZW50fGVufDB8fHx8MTc3Mzk3OTkwMnww&ixlib=rb-4.1.0&q=85",
+        "alt": "Tractor plowing field with implement"
+      },
+      {
+        "name": "Parts",
+        "url": "https://images.pexels.com/photos/7568421/pexels-photo-7568421.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "alt": "Precision gear parts"
+      }
+    ],
+    "hero_images": [
+      "https://images.unsplash.com/photo-1762291398819-335cdb4b14f1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBncmVlbiUyMHRyYWN0b3IlMjBpbiUyMGZpZWxkfGVufDB8fHx8MTc3Mzk3OTg5MXww&ixlib=rb-4.1.0&q=85",
+      "https://images.pexels.com/photos/2933243/pexels-photo-2933243.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    ]
+  },
+  "iconography": {
+    "library": "lucide-react",
+    "style": "stroke-width: 1.5px; size: 20px;"
+  },
+  "accessibility": {
+    "contrast_check": "Ensure all text on green buttons is pure white (#FFFFFF). Text on yellow buttons must be dark green (#1A4D2E).",
+    "interactive_elements": "Min target size 44x44px for mobile.",
+    "focus_states": "Visible focus ring with offset (ring-2 ring-offset-2 ring-green-600)."
+  },
+  "universal_guidelines": [
+    "Do NOT use gradients for main backgrounds. Use clean whites and subtle grays to let the product images pop.",
+    "Use 'Outfit' font for all Price tags and Headings.",
+    "Ensure the 'WhatsApp' button is always distinct and prominent on Listing pages.",
+    "Mobile First: The search bar must be the most prominent element on mobile homepage.",
+    "Do not center text in cards. Left align for better readability.",
+    "Use Skeleton loaders for images while they fetch.",
+    "All forms (Add Listing) must use Shadcn Form components with Zod validation."
+  ],
+  "instructions_to_main_agent": {
+    "setup": "Install 'lucide-react' for icons. Use 'sonner' for notifications.",
+    "routing": "Ensure 'react-router-dom' is set up for / (Home), /search, /listing/:id, /dashboard.",
+    "maps": "Use 'react-leaflet' and 'leaflet' for maps. Add proper CSS for leaflet maps.",
+    "seo": "Add meta tags for 'TratorShop - Buy & Sell Tractors in MS'."
+  }
+}
