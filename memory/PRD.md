@@ -7,12 +7,13 @@
 **Last Updated:** 2026-03-21
 
 ## Original Problem Statement
-Continue existing project TratorShop from GitHub - a marketplace platform with admin panel and authentication system for agricultural machinery (tractors, implements, harvesters, parts).
+Create a modern marketplace website called TratorShop - a classified marketplace for agricultural machinery. Connect buyers and sellers of tractors and agricultural equipment in Mato Grosso do Sul, Brazil.
 
 ## User Personas
-1. **Seller (Farmer/Dealer):** Lists machinery for sale with photos and specs, receives WhatsApp inquiries
-2. **Buyer (Farmer/Entrepreneur):** Searches for specific machinery types in specific cities, contacts sellers directly
-3. **Admin:** Approves/rejects listings, manages featured ads, user management
+1. **Seller (Farmer/Individual):** Lists machinery for sale with photos and specs, receives WhatsApp inquiries
+2. **Dealer (Store):** Professional seller with store profile, multiple listings, branding
+3. **Buyer (Farmer/Entrepreneur):** Searches for specific machinery types in specific cities, contacts sellers directly
+4. **Admin:** Approves/rejects listings, manages featured ads, manages dealers
 
 ## Core Requirements (Static)
 - Search by machine type and city
@@ -51,6 +52,20 @@ Continue existing project TratorShop from GitHub - a marketplace platform with a
 - ✅ SEO Meta Tags
 - ✅ Mobile responsive design
 
+### Phase 3: Dealer System V1 (Complete - 2026-03-21)
+- ✅ New user role: DEALER
+- ✅ Dealer profile fields: store_name, store_slug, store_logo, whatsapp, city, description
+- ✅ Dealer listing limits (admin configurable, default: 20)
+- ✅ Public dealer page at /loja/{store-slug}
+- ✅ Admin panel: Dealers tab
+- ✅ Admin: Promote user to dealer
+- ✅ Admin: Set listing limit per dealer
+- ✅ Admin: Activate/deactivate dealer
+- ✅ Admin: Demote dealer to regular user
+- ✅ Dashboard: Dealer info card with stats
+- ✅ Dashboard: Listing limit enforcement
+- ✅ Header: "Minha Loja" link for dealers
+
 ## Tech Stack
 - **Frontend:** React 19, TailwindCSS, Shadcn/UI, React Router v7, React-Leaflet
 - **Backend:** FastAPI, Motor (MongoDB async)
@@ -62,41 +77,68 @@ Continue existing project TratorShop from GitHub - a marketplace platform with a
 - Email: admin@tratorshop.com
 - Password: Admin@123 (must change on first login)
 
+## API Endpoints
+
+### Public
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/ | API info |
+| GET | /api/categories | List categories |
+| GET | /api/cities | MS cities list |
+| GET | /api/stats | Marketplace stats |
+| GET | /api/listings | List approved listings |
+| GET | /api/dealers/{slug} | Get dealer public profile |
+| GET | /api/dealers/{slug}/listings | Get dealer's listings |
+
+### Authenticated (User)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/listings | Create listing |
+| PUT | /api/listings/{id} | Update listing |
+| DELETE | /api/listings/{id} | Delete listing |
+| GET | /api/my-listings | User's listings |
+| GET | /api/dealer/profile | Dealer's own profile |
+| PUT | /api/dealer/profile | Update dealer profile |
+| POST | /api/dealer/logo | Upload dealer logo |
+
+### Admin Only
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/admin/listings | All listings |
+| POST | /api/admin/listings/{id}/approve | Approve listing |
+| POST | /api/admin/listings/{id}/reject | Reject listing |
+| GET | /api/admin/dealers | List all dealers |
+| POST | /api/admin/dealers/promote | Promote user to dealer |
+| PUT | /api/admin/dealers/{id}/limit | Set dealer limit |
+| POST | /api/admin/dealers/{id}/toggle-active | Toggle dealer status |
+| DELETE | /api/admin/dealers/{id} | Demote dealer |
+
 ## Prioritized Backlog
 
 ### P0 (Critical - Next Sprint)
+- [ ] Dealer profile editing page
+- [ ] Dealer logo upload in dashboard
 - [ ] Email notifications for approval/rejection
-- [ ] Image reordering (drag-drop)
-- [ ] Listing renewal before expiration
 
 ### P1 (High Priority)
+- [ ] List all stores page (/lojas)
 - [ ] Sitemap.xml generation
-- [ ] robots.txt optimization
 - [ ] Image compression/optimization
+- [ ] Dealer plans (Basic/Premium)
 
 ### P2 (Medium Priority)
 - [ ] User profile page
 - [ ] Favorite/save listings
 - [ ] Advanced filters (price range, year, hours)
+- [ ] Share listing on social media
 
-## API Endpoints
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | /api/ | No | API info |
-| GET | /api/categories | No | List categories |
-| GET | /api/cities | No | MS cities list |
-| GET | /api/stats | No | Marketplace stats |
-| GET | /api/listings | No | List approved listings |
-| POST | /api/listings | User | Create listing |
-| PUT | /api/listings/{id} | Owner | Update listing |
-| DELETE | /api/listings/{id} | Owner/Admin | Delete listing |
-| POST | /api/auth/session | No | Exchange session |
-| POST | /api/admin/auth/login | No | Admin login |
-| GET | /api/admin/listings | Admin | All listings |
-| POST | /api/admin/listings/{id}/approve | Admin | Approve listing |
-| POST | /api/admin/listings/{id}/reject | Admin | Reject listing |
+### P3 (Low Priority)
+- [ ] Seller ratings/reviews
+- [ ] SMS notifications (Twilio)
+- [ ] Analytics dashboard for sellers
 
 ## Next Actions
-1. Implement email notifications for listing status changes
-2. Add image reordering functionality
-3. Generate sitemap.xml for better SEO
+1. Implement dealer profile editing in dashboard
+2. Add dealer logo upload functionality
+3. Create /lojas page listing all dealers
+4. Implement email notifications for listing status

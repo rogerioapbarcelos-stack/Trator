@@ -2826,7 +2826,8 @@ const StorePage = () => {
         setDealer(res.data);
       } catch (error) {
         console.error("Error fetching dealer:", error);
-        toast.error("Loja não encontrada");
+        setDealer(null);
+        setLoading(false);
       }
     };
     fetchDealer();
@@ -2834,7 +2835,10 @@ const StorePage = () => {
 
   useEffect(() => {
     const fetchListings = async () => {
-      if (!dealer) return;
+      if (!dealer) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const params = new URLSearchParams();
@@ -2876,7 +2880,15 @@ const StorePage = () => {
     pecas: 'Peças'
   };
 
-  if (!dealer && !loading) {
+  if (loading && !dealer) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#1A4D2E]" />
+      </div>
+    );
+  }
+
+  if (!dealer) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
