@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-03-21T04:59:26.804022",
-  "total_tests": 26,
-  "passed_tests": 22,
-  "failed_tests": 4,
-  "success_rate": 84.61538461538461,
+  "timestamp": "2026-03-21T05:43:17.726331",
+  "total_tests": 33,
+  "passed_tests": 28,
+  "failed_tests": 5,
+  "success_rate": 84.84848484848484,
   "detailed_results": [
     {
       "test": "GET /api/",
@@ -72,6 +72,36 @@
       "status": "FAILED",
       "error": null,
       "status_code": 401
+    },
+    {
+      "test": "POST /api/auth/register (valid data)",
+      "status": "FAILED",
+      "error": null,
+      "status_code": 400
+    },
+    {
+      "test": "POST /api/auth/register (invalid email)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/auth/register (short password)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/auth/login (correct credentials)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/auth/login (wrong password)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/auth/login (non-existent user)",
+      "status": "PASSED"
+    },
+    {
+      "test": "POST /api/auth/login (admin user)",
+      "status": "PASSED"
     },
     {
       "test": "POST /api/admin/auth/login (correct credentials)",

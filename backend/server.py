@@ -165,6 +165,16 @@ class SessionData(BaseModel):
     expires_at: str
     created_at: str
 
+# User Email/Password Auth Models
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    name: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
 # Admin Models
 class AdminLogin(BaseModel):
     email: str
@@ -382,6 +392,106 @@ async def logout(request: Request):
     response = JSONResponse(content={"message": "Logged out"})
     response.delete_cookie(key="session_token", path="/")
     response.delete_cookie(key="admin_token", path="/")
+    return response
+
+@api_router.post("/auth/register")
+async def register_user(data: UserRegister):
+    """Register new user with email and password"""
+    import re
+    
+    # Validate email format
+    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_regex, data.email):
+        raise HTTPException(status_code=400, detail="Email inválido")
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": data.email.lower()})
+    if existing:
+        # Check if user has password (registered with email) or only Google
+        if existing.get("password_hash"):
+            raise HTTPException(status_code=400, detail="Email já cadastrado")
+        else:
+            # User exists from Google, add password to account
+            password_hash = hash_password(data.password)
+            await db.users.update_one(
+                {"email": data.email.lower()},
+                {"$set": {"password_hash": password_hash, "name": data.name}}
+            )
+            user = await db.users.find_one({"email": data.email.lower()}, {"_id": 0, "password_hash": 0})
+            return {"message": "Senha adicionada à conta existente", "user": user}
+    
+    # Validate password
+    if len(data.password) < 6:
+        raise HTTPException(status_code=400, detail="Senha deve ter pelo menos 6 caracteres")
+    
+    # Create new user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    user_doc = {
+        "user_id": user_id,
+        "email": data.email.lower(),
+        "name": data.name,
+        "password_hash": hash_password(data.password),
+        "picture": None,
+        "is_admin": False,
+        "role": "user",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.users.insert_one(user_doc)
+    
+    # Return user without password_hash and _id
+    response_user = {
+        "user_id": user_id,
+        "email": user_doc["email"],
+        "name": user_doc["name"],
+        "picture": None,
+        "is_admin": False,
+        "role": "user",
+        "created_at": user_doc["created_at"]
+    }
+    
+    return {"message": "Cadastro realizado com sucesso", "user": response_user}
+
+@api_router.post("/auth/login")
+async def login_user(data: UserLogin):
+    """Login user with email and password"""
+    user = await db.users.find_one({"email": data.email.lower()})
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+    
+    # Check if user has password
+    if not user.get("password_hash"):
+        raise HTTPException(status_code=401, detail="Use o login com Google para esta conta")
+    
+    # Verify password
+    if not verify_password(data.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+    
+    # Generate session token
+    session_token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    session_doc = {
+        "user_id": user["user_id"],
+        "session_token": session_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.user_sessions.insert_one(session_doc)
+    
+    # Prepare user data (without password_hash)
+    user_data = {k: v for k, v in user.items() if k not in ["_id", "password_hash"]}
+    
+    response = JSONResponse(content=user_data)
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
     return response
 
 # =============================================================================

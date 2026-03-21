@@ -211,7 +211,13 @@ const AuthCallback = () => {
         );
         setUser(response.data);
         toast.success(`Bem-vindo, ${response.data.name}!`);
-        navigate('/dashboard', { replace: true, state: { user: response.data } });
+        
+        // Redirect admin to admin panel
+        if (response.data.is_admin) {
+          navigate('/admin', { replace: true, state: { user: response.data } });
+        } else {
+          navigate('/dashboard', { replace: true, state: { user: response.data } });
+        }
       } catch (error) {
         console.error("Auth error:", error);
         toast.error("Erro ao fazer login");
@@ -2765,18 +2771,90 @@ const AdminPage = () => {
 
 // Login Page
 const LoginPage = () => {
-  const { user, login } = useAuth();
+  const { user, login, setUser } = useAuth();
   const navigate = useNavigate();
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (user) {
-      navigate('/dashboard');
+      // Redirect admin to admin panel
+      if (user.is_admin) {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     }
   }, [user, navigate]);
 
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await axios.post(
+        `${API}/auth/login`,
+        { email, password },
+        { withCredentials: true }
+      );
+      setUser(response.data);
+      toast.success(`Bem-vindo, ${response.data.name}!`);
+      
+      // Redirect based on role
+      if (response.data.is_admin) {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      const message = err.response?.data?.detail || 'Erro ao fazer login';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEmailRegister = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    if (!name.trim()) {
+      setError('Nome é obrigatório');
+      return;
+    }
+    
+    setLoading(true);
+
+    try {
+      await axios.post(`${API}/auth/register`, { email, password, name });
+      toast.success('Cadastro realizado! Fazendo login...');
+      
+      // Auto login after register
+      const response = await axios.post(
+        `${API}/auth/login`,
+        { email, password },
+        { withCredentials: true }
+      );
+      setUser(response.data);
+      navigate('/dashboard');
+    } catch (err) {
+      const message = err.response?.data?.detail || 'Erro ao cadastrar';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center py-12 px-4" data-testid="login-page">
-      <SEOHead title="Entrar" />
+      <SEOHead title={isLogin ? "Entrar" : "Cadastrar"} />
       
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
@@ -2784,14 +2862,90 @@ const LoginPage = () => {
             <Tractor className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>
-            Entre no TratorShop
+            {isLogin ? 'Entre no TratorShop' : 'Crie sua conta'}
           </h1>
           <p className="text-slate-500">
-            Faça login para anunciar suas máquinas
+            {isLogin ? 'Faça login para anunciar suas máquinas' : 'Cadastre-se para começar a anunciar'}
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Email/Password Form */}
+          <form onSubmit={isLogin ? handleEmailLogin : handleEmailRegister} className="space-y-4">
+            {!isLogin && (
+              <div>
+                <Label htmlFor="name">Nome</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Seu nome"
+                  className="mt-1"
+                  data-testid="register-name-input"
+                />
+              </div>
+            )}
+            
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                placeholder="seu@email.com"
+                className="mt-1"
+                data-testid="login-email-input"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                placeholder={isLogin ? "Sua senha" : "Mínimo 6 caracteres"}
+                className="mt-1"
+                data-testid="login-password-input"
+              />
+            </div>
+
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm" data-testid="login-error">
+                {error}
+              </div>
+            )}
+            
+            <Button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#1A4D2E] hover:bg-[#143d24] py-6"
+              data-testid="login-submit-button"
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              ) : (
+                <Mail className="w-5 h-5 mr-2" />
+              )}
+              {isLogin ? 'Entrar' : 'Cadastrar'}
+            </Button>
+          </form>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-slate-200" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-slate-500">ou</span>
+            </div>
+          </div>
+
+          {/* Google Login */}
           <Button 
+            type="button"
             onClick={login}
             className="w-full bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 py-6"
             data-testid="google-login-button"
@@ -2802,8 +2956,23 @@ const LoginPage = () => {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
-            Continuar com Google
+            Entrar com Google
           </Button>
+
+          {/* Toggle Login/Register */}
+          <div className="text-center text-sm">
+            <span className="text-slate-500">
+              {isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'}
+            </span>
+            <button
+              type="button"
+              onClick={() => { setIsLogin(!isLogin); setError(''); }}
+              className="ml-1 text-[#1A4D2E] font-medium hover:underline"
+              data-testid="toggle-auth-mode"
+            >
+              {isLogin ? 'Cadastre-se' : 'Faça login'}
+            </button>
+          </div>
         </CardContent>
       </Card>
     </div>

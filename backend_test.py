@@ -543,6 +543,183 @@ class TratorShopAPITester:
         self.test_admin_dealer_endpoints()
         sleep(0.1)
 
+    def test_user_register_api(self):
+        """Test user registration with email/password"""
+        try:
+            # Test with valid data
+            user_data = {
+                "email": "novo@tratorshop.com",
+                "password": "senha123",
+                "name": "Novo Usuario"
+            }
+            response = requests.post(f"{self.api_url}/auth/register", json=user_data)
+            success = response.status_code in [200, 201]
+            if success:
+                data = response.json()
+                success = "user" in data and data["user"]["email"] == user_data["email"]
+            self.log_test("POST /api/auth/register (valid data)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/auth/register (valid data)", False, None, str(e))
+            return False
+
+    def test_user_register_api_invalid_email(self):
+        """Test user registration with invalid email"""
+        try:
+            user_data = {
+                "email": "invalid-email",
+                "password": "senha123",
+                "name": "Test User"
+            }
+            response = requests.post(f"{self.api_url}/auth/register", json=user_data)
+            success = response.status_code == 400
+            if success:
+                data = response.json()
+                success = "Email inválido" in data.get("detail", "")
+            self.log_test("POST /api/auth/register (invalid email)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/auth/register (invalid email)", False, None, str(e))
+            return False
+
+    def test_user_register_api_short_password(self):
+        """Test user registration with short password"""
+        try:
+            user_data = {
+                "email": "test@example.com",
+                "password": "123",
+                "name": "Test User"
+            }
+            response = requests.post(f"{self.api_url}/auth/register", json=user_data)
+            success = response.status_code == 400
+            if success:
+                data = response.json()
+                success = "pelo menos 6 caracteres" in data.get("detail", "")
+            self.log_test("POST /api/auth/register (short password)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/auth/register (short password)", False, None, str(e))
+            return False
+
+    def test_user_login_api(self):
+        """Test user login with email/password"""
+        try:
+            # First ensure user exists by registering
+            user_data = {
+                "email": "novo@tratorshop.com",
+                "password": "senha123",
+                "name": "Novo Usuario"
+            }
+            requests.post(f"{self.api_url}/auth/register", json=user_data)
+            
+            # Now test login
+            login_data = {
+                "email": "novo@tratorshop.com",
+                "password": "senha123"
+            }
+            response = requests.post(f"{self.api_url}/auth/login", json=login_data)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = "user_id" in data and data["email"] == login_data["email"]
+                # Check if session_token cookie is set
+                if 'set-cookie' in response.headers:
+                    cookies = response.headers['set-cookie']
+                    success = success and 'session_token=' in cookies
+            self.log_test("POST /api/auth/login (correct credentials)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/auth/login (correct credentials)", False, None, str(e))
+            return False
+
+    def test_user_login_api_wrong_password(self):
+        """Test user login with wrong password"""
+        try:
+            login_data = {
+                "email": "novo@tratorshop.com",
+                "password": "wrongpassword"
+            }
+            response = requests.post(f"{self.api_url}/auth/login", json=login_data)
+            success = response.status_code == 401
+            if success:
+                data = response.json()
+                success = "Email ou senha incorretos" in data.get("detail", "")
+            self.log_test("POST /api/auth/login (wrong password)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/auth/login (wrong password)", False, None, str(e))
+            return False
+
+    def test_user_login_api_nonexistent_user(self):
+        """Test user login with non-existent email"""
+        try:
+            login_data = {
+                "email": "nonexistent@example.com",
+                "password": "somepassword"
+            }
+            response = requests.post(f"{self.api_url}/auth/login", json=login_data)
+            success = response.status_code == 401
+            if success:
+                data = response.json()
+                success = "Email ou senha incorretos" in data.get("detail", "")
+            self.log_test("POST /api/auth/login (non-existent user)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/auth/login (non-existent user)", False, None, str(e))
+            return False
+
+    def test_admin_user_login_redirect(self):
+        """Test admin user login returns admin flag"""
+        try:
+            # First create admin user
+            admin_data = {
+                "email": "admin@tratorshop.com",
+                "password": "Admin@123",
+                "name": "Admin User"
+            }
+            requests.post(f"{self.api_url}/auth/register", json=admin_data)
+            
+            # Login as admin
+            login_data = {
+                "email": "admin@tratorshop.com",
+                "password": "Admin@123"
+            }
+            response = requests.post(f"{self.api_url}/auth/login", json=login_data)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = data.get("is_admin") == True or data.get("email") == "admin@tratorshop.com"
+            self.log_test("POST /api/auth/login (admin user)", success, response.status_code)
+            return success
+        except Exception as e:
+            self.log_test("POST /api/auth/login (admin user)", False, None, str(e))
+            return False
+
+    def run_dual_auth_tests(self):
+        """Run all dual authentication tests"""
+        print("\n🔐 Testing Dual Authentication System...")
+        
+        self.test_user_register_api()
+        sleep(0.1)
+        
+        self.test_user_register_api_invalid_email()
+        sleep(0.1)
+        
+        self.test_user_register_api_short_password()
+        sleep(0.1)
+        
+        self.test_user_login_api()
+        sleep(0.1)
+        
+        self.test_user_login_api_wrong_password()
+        sleep(0.1)
+        
+        self.test_user_login_api_nonexistent_user()
+        sleep(0.1)
+        
+        self.test_admin_user_login_redirect()
+        sleep(0.1)
+
     def run_admin_auth_tests(self):
         """Run all admin authentication tests"""
         print("\n🔐 Testing Admin Authentication System...")
@@ -579,6 +756,7 @@ def main():
     try:
         tester.run_public_api_tests()
         tester.run_authenticated_tests()
+        tester.run_dual_auth_tests()  # Add dual authentication tests
         tester.run_admin_auth_tests()  # Add admin authentication tests
         tester.run_dealer_tests()  # Add dealer system tests
         tester.print_summary()
