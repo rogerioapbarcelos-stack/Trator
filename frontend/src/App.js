@@ -586,7 +586,68 @@ const SearchBar = ({ onSearch, initialQuery = '', initialCity = '' }) => {
 // Image Upload Component
 const ImageUploader = ({ images, onImagesChange, listingId, maxImages = 10 }) => {
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const fileInputRef = useRef(null);
+
+  // Compress image using canvas
+  const compressImage = async (file, maxWidth = 1200, quality = 0.8) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Scale down if needed
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob(
+            (blob) => {
+              resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+                type: 'image/jpeg'
+              }));
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Convert HEIC to JPEG
+  const convertHeicToJpeg = async (file) => {
+    try {
+      // Dynamic import for heic2any library
+      const heic2any = (await import('heic2any')).default;
+      const blob = await heic2any({
+        blob: file,
+        toType: 'image/jpeg',
+        quality: 0.8
+      });
+      return new File([blob], file.name.replace(/\.heic$/i, '.jpg'), {
+        type: 'image/jpeg'
+      });
+    } catch (error) {
+      console.error('HEIC conversion failed:', error);
+      // Fallback: try to read as-is (some browsers support HEIC)
+      return file;
+    }
+  };
 
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files);
@@ -598,22 +659,39 @@ const ImageUploader = ({ images, onImagesChange, listingId, maxImages = 10 }) =>
     }
 
     setUploading(true);
+    setUploadingCount(files.length);
+    setUploadProgress(0);
     const newImages = [];
 
-    for (const file of files) {
-      // Validate file type
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-        toast.error(`${file.name}: Formato não suportado`);
-        continue;
-      }
-
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error(`${file.name}: Arquivo muito grande (max 5MB)`);
+    for (let i = 0; i < files.length; i++) {
+      let file = files[i];
+      const fileName = file.name.toLowerCase();
+      
+      // Check for HEIC format
+      const isHeic = fileName.endsWith('.heic') || fileName.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif';
+      
+      // Validate file type (including HEIC)
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'];
+      const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
+      
+      if (!validTypes.includes(file.type) && !hasValidExtension && !isHeic) {
+        toast.error(`${file.name}: Formato não suportado. Use JPG, PNG, WEBP ou HEIC`);
         continue;
       }
 
       try {
+        // Convert HEIC to JPEG if needed
+        if (isHeic) {
+          toast.info(`Convertendo ${file.name}...`);
+          file = await convertHeicToJpeg(file);
+        }
+        
+        // Compress image if larger than 1MB
+        if (file.size > 1024 * 1024) {
+          file = await compressImage(file);
+        }
+
         const formData = new FormData();
         formData.append('file', file);
         
@@ -622,10 +700,15 @@ const ImageUploader = ({ images, onImagesChange, listingId, maxImages = 10 }) =>
           formData,
           { 
             withCredentials: true,
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (progressEvent) => {
+              const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setUploadProgress(Math.round(((i + percentCompleted / 100) / files.length) * 100));
+            }
           }
         );
         newImages.push(res.data.path);
+        setUploadProgress(Math.round(((i + 1) / files.length) * 100));
       } catch (error) {
         console.error("Error uploading image:", error);
         toast.error(`Erro ao enviar ${file.name}`);
@@ -637,6 +720,8 @@ const ImageUploader = ({ images, onImagesChange, listingId, maxImages = 10 }) =>
       toast.success(`${newImages.length} imagem(ns) enviada(s)`);
     }
     setUploading(false);
+    setUploadProgress(0);
+    setUploadingCount(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -647,6 +732,24 @@ const ImageUploader = ({ images, onImagesChange, listingId, maxImages = 10 }) =>
 
   return (
     <div className="space-y-4">
+      {/* Upload Progress */}
+      {uploading && (
+        <div className="p-4 bg-blue-50 rounded-lg">
+          <div className="flex items-center gap-3 mb-2">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+            <span className="text-sm text-blue-700">
+              Enviando {uploadingCount} imagem(ns)... {uploadProgress}%
+            </span>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         {images.map((img, idx) => (
           <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 group">
@@ -658,7 +761,8 @@ const ImageUploader = ({ images, onImagesChange, listingId, maxImages = 10 }) =>
             <button
               type="button"
               onClick={() => removeImage(idx)}
-              className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity touch-manipulation"
+              style={{ minWidth: '36px', minHeight: '36px' }}
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -671,35 +775,33 @@ const ImageUploader = ({ images, onImagesChange, listingId, maxImages = 10 }) =>
         ))}
         
         {images.length < maxImages && (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="aspect-square rounded-lg border-2 border-dashed border-slate-300 hover:border-[#1A4D2E] flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-[#1A4D2E] transition-colors"
+          <label
+            className="aspect-square rounded-lg border-2 border-dashed border-slate-300 hover:border-[#1A4D2E] active:border-[#1A4D2E] flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-[#1A4D2E] transition-colors cursor-pointer touch-manipulation"
           >
             {uploading ? (
               <Loader2 className="w-8 h-8 animate-spin" />
             ) : (
               <>
                 <Camera className="w-8 h-8" />
-                <span className="text-xs">Adicionar</span>
+                <span className="text-xs text-center px-2">Adicionar Foto</span>
               </>
             )}
-          </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
+              multiple
+              capture="environment"
+              onChange={handleFileSelect}
+              className="hidden"
+              disabled={uploading}
+            />
+          </label>
         )}
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        multiple
-        onChange={handleFileSelect}
-        className="hidden"
-      />
-
-      <p className="text-xs text-slate-500">
-        {images.length}/{maxImages} imagens • JPEG, PNG ou WebP • Máx. 5MB cada
+      <p className="text-xs text-slate-500 text-center">
+        Formatos aceitos: JPG, PNG, WEBP, HEIC • Máximo {maxImages} fotos • Imagens são comprimidas automaticamente
       </p>
     </div>
   );
@@ -1697,13 +1799,155 @@ const ListingFormPage = () => {
 };
 
 // Dashboard Page
+// Onboarding Modal Component
+const OnboardingModal = ({ isOpen, onComplete }) => {
+  const [accountType, setAccountType] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!accountType) {
+      toast.error("Selecione um tipo de conta");
+      return;
+    }
+    
+    if (accountType === 'dealer' && !storeName.trim()) {
+      toast.error("Nome da loja é obrigatório");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${API}/user/onboarding`,
+        { 
+          account_type: accountType,
+          store_name: accountType === 'dealer' ? storeName : null
+        },
+        { withCredentials: true }
+      );
+      toast.success("Perfil configurado com sucesso!");
+      onComplete(res.data);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao configurar perfil");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-lg" data-testid="onboarding-modal">
+        <CardHeader className="text-center pb-2">
+          <div className="w-16 h-16 bg-[#1A4D2E] rounded-xl flex items-center justify-center mx-auto mb-4">
+            <Tractor className="w-10 h-10 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>
+            Bem-vindo ao TratorShop!
+          </h2>
+          <p className="text-slate-500">
+            Escolha como você quer anunciar
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Individual Option */}
+          <button
+            type="button"
+            onClick={() => setAccountType('individual')}
+            className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
+              accountType === 'individual' 
+                ? 'border-[#1A4D2E] bg-[#1A4D2E]/5' 
+                : 'border-slate-200 hover:border-slate-300'
+            }`}
+            data-testid="onboarding-individual"
+          >
+            <div className="flex items-start gap-4">
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                accountType === 'individual' ? 'bg-[#1A4D2E] text-white' : 'bg-slate-100 text-slate-500'
+              }`}>
+                <User className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-slate-900">Vendedor Individual</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Para quem quer vender algumas máquinas. Limite de 3 anúncios ativos.
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* Dealer Option */}
+          <button
+            type="button"
+            onClick={() => setAccountType('dealer')}
+            className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
+              accountType === 'dealer' 
+                ? 'border-[#F9C02D] bg-[#F9C02D]/5' 
+                : 'border-slate-200 hover:border-slate-300'
+            }`}
+            data-testid="onboarding-dealer"
+          >
+            <div className="flex items-start gap-4">
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                accountType === 'dealer' ? 'bg-[#F9C02D] text-[#1A4D2E]' : 'bg-slate-100 text-slate-500'
+              }`}>
+                <Store className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-slate-900">Lojista / Dealer</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Para lojas e revendedores. Página própria da loja e até 10 anúncios iniciais.
+                </p>
+                <Badge className="mt-2 bg-[#F9C02D]/20 text-[#1A4D2E]">
+                  Página exclusiva /loja/sua-loja
+                </Badge>
+              </div>
+            </div>
+          </button>
+
+          {/* Store Name Input (for dealers) */}
+          {accountType === 'dealer' && (
+            <div className="pt-2">
+              <Label htmlFor="store-name">Nome da sua Loja</Label>
+              <Input
+                id="store-name"
+                value={storeName}
+                onChange={(e) => setStoreName(e.target.value)}
+                placeholder="Ex: Tratores do Sul"
+                className="mt-1"
+                data-testid="onboarding-store-name"
+              />
+            </div>
+          )}
+
+          <Button
+            onClick={handleSubmit}
+            disabled={loading || !accountType}
+            className="w-full bg-[#1A4D2E] hover:bg-[#143d24] py-6 mt-4"
+            data-testid="onboarding-submit"
+          >
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            ) : null}
+            Começar a Anunciar
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 const DashboardPage = () => {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dealerInfo, setDealerInfo] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const currentUser = user || location.state?.user;
 
@@ -1712,11 +1956,28 @@ const DashboardPage = () => {
       navigate('/login');
       return;
     }
+    fetchUserProfile();
     fetchListings();
-    if (currentUser?.role === 'dealer') {
-      fetchDealerInfo();
-    }
   }, [currentUser, navigate]);
+
+  const fetchUserProfile = async () => {
+    try {
+      const res = await axios.get(`${API}/user/profile`, { withCredentials: true });
+      setUserProfile(res.data);
+      
+      // Show onboarding if not complete
+      if (!res.data.onboarding_complete) {
+        setShowOnboarding(true);
+      }
+      
+      // Fetch dealer info if dealer
+      if (res.data.role === 'dealer') {
+        fetchDealerInfo();
+      }
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+    }
+  };
 
   const fetchListings = async () => {
     try {
@@ -1738,6 +1999,15 @@ const DashboardPage = () => {
     }
   };
 
+  const handleOnboardingComplete = (updatedUser) => {
+    setShowOnboarding(false);
+    setUserProfile(updatedUser);
+    setUser(updatedUser);
+    if (updatedUser.role === 'dealer') {
+      fetchDealerInfo();
+    }
+  };
+
   const handleDelete = async (listingId) => {
     if (!window.confirm('Tem certeza que deseja excluir este anúncio?')) return;
     
@@ -1745,7 +2015,8 @@ const DashboardPage = () => {
       await axios.delete(`${API}/listings/${listingId}`, { withCredentials: true });
       toast.success("Anúncio excluído");
       fetchListings();
-      if (currentUser?.role === 'dealer') fetchDealerInfo();
+      fetchUserProfile();
+      if (userProfile?.role === 'dealer') fetchDealerInfo();
     } catch (error) {
       toast.error("Erro ao excluir anúncio");
     }
@@ -1767,14 +2038,21 @@ const DashboardPage = () => {
   };
 
   const activeListings = listings.filter(l => l.status === 'approved' || l.status === 'pending').length;
+  const maxListings = userProfile?.max_listings || 3;
 
   return (
     <div className="min-h-screen bg-slate-50 py-8" data-testid="dashboard-page">
       <SEOHead title="Meus Anúncios" />
       
+      {/* Onboarding Modal */}
+      <OnboardingModal 
+        isOpen={showOnboarding} 
+        onComplete={handleOnboardingComplete}
+      />
+      
       <div className="max-w-6xl mx-auto px-4 md:px-8">
         {/* Dealer Info Card */}
-        {currentUser?.role === 'dealer' && dealerInfo && (
+        {userProfile?.role === 'dealer' && dealerInfo && (
           <Card className="mb-6 bg-gradient-to-r from-[#1A4D2E] to-[#2d6e45] text-white">
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1830,18 +2108,40 @@ const DashboardPage = () => {
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900" style={{ fontFamily: 'Outfit' }}>
               Meus Anúncios
             </h1>
-            <p className="text-slate-500">Gerencie suas máquinas anunciadas</p>
+            <p className="text-slate-500">
+              {userProfile?.role !== 'dealer' && (
+                <span>Limite: {activeListings}/{maxListings} anúncios</span>
+              )}
+              {!userProfile?.role && "Gerencie suas máquinas anunciadas"}
+            </p>
           </div>
           <Button 
             onClick={() => navigate('/anunciar')}
             className="bg-[#F9C02D] hover:bg-[#f5b00b] text-[#1A4D2E] font-bold"
             data-testid="new-listing-button"
-            disabled={currentUser?.role === 'dealer' && dealerInfo && activeListings >= dealerInfo.max_listings}
+            disabled={activeListings >= maxListings}
           >
             <Plus className="w-4 h-4 mr-2" />
             Novo Anúncio
           </Button>
         </div>
+
+        {/* Individual User Limit Warning */}
+        {userProfile?.role !== 'dealer' && activeListings >= maxListings && (
+          <Card className="mb-6 bg-amber-50 border-amber-200">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Shield className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="font-medium text-amber-800">Limite de anúncios atingido</p>
+                <p className="text-sm text-amber-600">
+                  Você atingiu o limite de {maxListings} anúncios. Entre em contato com o administrador ou torne-se um Dealer para mais anúncios.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {loading ? (
           <div className="space-y-4">
@@ -2155,9 +2455,10 @@ const AdminPage = () => {
   const [listings, setListings] = useState([]);
   const [users, setUsers] = useState([]);
   const [dealers, setDealers] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
-  const [activeTab, setActiveTab] = useState('listings');
+  const [activeTab, setActiveTab] = useState('dashboard');
   
   // Promote to Dealer Modal
   const [showPromoteModal, setShowPromoteModal] = useState(false);
@@ -2171,6 +2472,15 @@ const AdminPage = () => {
   const [editingDealer, setEditingDealer] = useState(null);
   const [newLimit, setNewLimit] = useState('');
 
+  // Edit User Modal
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUserLimit, setEditUserLimit] = useState('');
+
+  // Edit Listing Modal
+  const [showEditListingModal, setShowEditListingModal] = useState(false);
+  const [editingListing, setEditingListing] = useState(null);
+
   useEffect(() => {
     if (!admin) {
       navigate('/admin-login');
@@ -2180,8 +2490,23 @@ const AdminPage = () => {
       navigate('/admin/change-password');
       return;
     }
-    fetchListings();
-  }, [admin, navigate, filter]);
+    fetchStats();
+  }, [admin, navigate]);
+
+  useEffect(() => {
+    if (activeTab === 'listings') {
+      fetchListings();
+    }
+  }, [filter, activeTab]);
+
+  const fetchStats = async () => {
+    try {
+      const res = await axios.get(`${API}/admin/stats`, { withCredentials: true });
+      setStats(res.data);
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+    }
+  };
 
   const fetchListings = async () => {
     setLoading(true);
@@ -2230,6 +2555,7 @@ const AdminPage = () => {
       await axios.post(`${API}/admin/listings/${listingId}/approve`, {}, { withCredentials: true });
       toast.success("Anúncio aprovado!");
       fetchListings();
+      fetchStats();
     } catch (error) {
       toast.error("Erro ao aprovar");
     }
@@ -2240,8 +2566,21 @@ const AdminPage = () => {
       await axios.post(`${API}/admin/listings/${listingId}/reject`, {}, { withCredentials: true });
       toast.success("Anúncio rejeitado");
       fetchListings();
+      fetchStats();
     } catch (error) {
       toast.error("Erro ao rejeitar");
+    }
+  };
+
+  const handleDeleteListing = async (listingId) => {
+    if (!window.confirm('Tem certeza que deseja excluir este anúncio permanentemente?')) return;
+    try {
+      await axios.delete(`${API}/admin/listings/${listingId}`, { withCredentials: true });
+      toast.success("Anúncio excluído!");
+      fetchListings();
+      fetchStats();
+    } catch (error) {
+      toast.error("Erro ao excluir");
     }
   };
 
@@ -2252,6 +2591,37 @@ const AdminPage = () => {
       fetchListings();
     } catch (error) {
       toast.error("Erro ao alterar destaque");
+    }
+  };
+
+  const handleUpdateUserLimit = async (e) => {
+    e.preventDefault();
+    if (!editingUser || !editUserLimit) return;
+    
+    try {
+      await axios.put(`${API}/admin/users/${editingUser.user_id}/limit`, {
+        max_listings: parseInt(editUserLimit)
+      }, { withCredentials: true });
+      
+      toast.success("Limite atualizado!");
+      setShowEditUserModal(false);
+      setEditingUser(null);
+      fetchUsers();
+    } catch (error) {
+      toast.error("Erro ao atualizar limite");
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    if (!window.confirm(`Excluir usuário ${user.name}? Todos os anúncios serão removidos.`)) return;
+    
+    try {
+      await axios.delete(`${API}/admin/users/${user.user_id}`, { withCredentials: true });
+      toast.success("Usuário excluído!");
+      fetchUsers();
+      fetchStats();
+    } catch (error) {
+      toast.error("Erro ao excluir usuário");
     }
   };
 
@@ -2387,6 +2757,9 @@ const AdminPage = () => {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-slate-800">
+            <TabsTrigger value="dashboard" className="data-[state=active]:bg-[#1A4D2E]" data-testid="tab-dashboard">
+              Dashboard
+            </TabsTrigger>
             <TabsTrigger value="listings" className="data-[state=active]:bg-[#1A4D2E]">
               Anúncios
             </TabsTrigger>
@@ -2397,6 +2770,156 @@ const AdminPage = () => {
               Usuários
             </TabsTrigger>
           </TabsList>
+
+          {/* Dashboard Tab */}
+          <TabsContent value="dashboard">
+            <div className="space-y-6">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <Users className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-white">{stats?.users?.total || 0}</p>
+                        <p className="text-sm text-slate-400">Usuários</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                        <Package className="w-5 h-5 text-green-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-white">{stats?.listings?.approved || 0}</p>
+                        <p className="text-sm text-slate-400">Ativos</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                        <Clock className="w-5 h-5 text-amber-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-white">{stats?.listings?.pending || 0}</p>
+                        <p className="text-sm text-slate-400">Pendentes</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <Store className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-white">{stats?.users?.dealers || 0}</p>
+                        <p className="text-sm text-slate-400">Dealers</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Secondary Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Categories Breakdown */}
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardHeader>
+                    <h3 className="text-lg font-semibold text-white">Anúncios por Categoria</h3>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {[
+                        { key: 'tratores', label: 'Tratores', icon: Tractor },
+                        { key: 'implementos', label: 'Implementos', icon: Wrench },
+                        { key: 'colheitadeiras', label: 'Colheitadeiras', icon: Cog },
+                        { key: 'pecas', label: 'Peças', icon: Settings }
+                      ].map(cat => (
+                        <div key={cat.key} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-slate-300">
+                            <cat.icon className="w-4 h-4" />
+                            {cat.label}
+                          </div>
+                          <span className="text-white font-medium">
+                            {stats?.categories?.[cat.key] || 0}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Weekly Activity */}
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardHeader>
+                    <h3 className="text-lg font-semibold text-white">Atividade Semanal</h3>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+                        <span className="text-slate-300">Novos usuários</span>
+                        <Badge className="bg-blue-500">{stats?.users?.new_this_week || 0}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+                        <span className="text-slate-300">Novos anúncios</span>
+                        <Badge className="bg-green-500">{stats?.listings?.new_this_week || 0}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+                        <span className="text-slate-300">Destaques ativos</span>
+                        <Badge className="bg-[#F9C02D] text-[#1A4D2E]">{stats?.listings?.featured || 0}</Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Quick Actions */}
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <h3 className="text-lg font-semibold text-white">Ações Rápidas</h3>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-3">
+                    <Button 
+                      onClick={() => { setActiveTab('listings'); setFilter('pending'); }}
+                      className="bg-amber-600 hover:bg-amber-700"
+                    >
+                      <Clock className="w-4 h-4 mr-2" />
+                      Ver Pendentes ({stats?.listings?.pending || 0})
+                    </Button>
+                    <Button 
+                      onClick={() => setShowPromoteModal(true)}
+                      className="bg-[#F9C02D] hover:bg-[#f5b00b] text-[#1A4D2E]"
+                    >
+                      <Store className="w-4 h-4 mr-2" />
+                      Novo Dealer
+                    </Button>
+                    <Button 
+                      onClick={() => setActiveTab('users')}
+                      variant="outline"
+                      className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      Gerenciar Usuários
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
           <TabsContent value="listings">
             <Tabs value={filter} onValueChange={setFilter}>
@@ -2483,6 +3006,16 @@ const AdminPage = () => {
                                     {listing.is_featured ? 'Remover Destaque' : 'Destacar'}
                                   </Button>
                                 )}
+                                {/* Delete button for all listings */}
+                                <Button 
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDeleteListing(listing.listing_id)}
+                                  className="text-red-400 border-red-700 hover:bg-red-900/50"
+                                  data-testid={`delete-${listing.listing_id}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
                               </div>
                             </div>
                           </div>
@@ -2614,12 +3147,12 @@ const AdminPage = () => {
           <TabsContent value="users">
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader>
-                <h2 className="text-lg font-semibold text-white">Usuários Registrados</h2>
+                <h2 className="text-lg font-semibold text-white">Usuários Registrados ({users.length})</h2>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {users.map(user => (
-                    <div key={user.user_id} className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+                    <div key={user.user_id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-700 rounded-lg gap-3">
                       <div className="flex items-center gap-3">
                         <Avatar>
                           <AvatarImage src={user.picture} />
@@ -2630,21 +3163,67 @@ const AdminPage = () => {
                         <div>
                           <p className="font-medium text-white">{user.name}</p>
                           <p className="text-sm text-slate-400">{user.email}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {user.role === 'dealer' ? (
+                              <Badge className="bg-[#F9C02D] text-[#1A4D2E]">
+                                <Store className="w-3 h-3 mr-1" />
+                                Dealer ({user.dealer_profile?.max_listings || 20} anúncios)
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-slate-400 border-slate-600">
+                                <User className="w-3 h-3 mr-1" />
+                                Individual ({user.max_listings || 3} anúncios)
+                              </Badge>
+                            )}
+                            {user.is_admin && (
+                              <Badge className="bg-red-600">Admin</Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {user.role === 'dealer' && (
-                          <Badge className="bg-[#F9C02D] text-[#1A4D2E]">
-                            <Store className="w-3 h-3 mr-1" />
-                            Dealer
-                          </Badge>
-                        )}
-                        {user.is_admin && (
-                          <Badge className="bg-[#1A4D2E]">Admin</Badge>
-                        )}
-                        <span className="text-xs text-slate-500">
+                      <div className="flex items-center gap-2 ml-12 sm:ml-0">
+                        <span className="text-xs text-slate-500 hidden sm:block">
                           {new Date(user.created_at).toLocaleDateString('pt-BR')}
                         </span>
+                        {user.role !== 'dealer' && (
+                          <Button 
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingUser(user);
+                              setEditUserLimit(user.max_listings?.toString() || '3');
+                              setShowEditUserModal(true);
+                            }}
+                            className="text-slate-300 border-slate-600 hover:bg-slate-600"
+                          >
+                            <Edit className="w-4 h-4 mr-1" />
+                            Limite
+                          </Button>
+                        )}
+                        {user.role !== 'dealer' && !user.is_admin && (
+                          <Button 
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setPromoteEmail(user.email);
+                              setShowPromoteModal(true);
+                            }}
+                            className="text-[#F9C02D] border-[#F9C02D] hover:bg-[#F9C02D]/20"
+                          >
+                            <Store className="w-4 h-4 mr-1" />
+                            Dealer
+                          </Button>
+                        )}
+                        {!user.is_admin && (
+                          <Button 
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteUser(user)}
+                            className="text-red-400 border-red-700 hover:bg-red-900/50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -2653,6 +3232,51 @@ const AdminPage = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Edit User Limit Modal */}
+        <Dialog open={showEditUserModal} onOpenChange={setShowEditUserModal}>
+          <DialogContent className="bg-slate-800 border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">Alterar Limite de Anúncios</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                {editingUser?.name} ({editingUser?.email})
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleUpdateUserLimit} className="space-y-4 mt-4">
+              <div>
+                <Label className="text-slate-300">Novo Limite</Label>
+                <Input
+                  type="number"
+                  value={editUserLimit}
+                  onChange={(e) => setEditUserLimit(e.target.value)}
+                  placeholder="3"
+                  min="1"
+                  max="100"
+                  className="mt-1 bg-slate-700 border-slate-600 text-white"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Padrão para usuários individuais: 3 anúncios
+                </p>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setShowEditUserModal(false)}
+                  className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  type="submit"
+                  className="flex-1 bg-[#1A4D2E] hover:bg-[#143d24]"
+                >
+                  Salvar
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         {/* Promote to Dealer Modal */}
         <Dialog open={showPromoteModal} onOpenChange={setShowPromoteModal}>

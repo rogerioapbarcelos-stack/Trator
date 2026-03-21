@@ -225,6 +225,34 @@ class PromoteToDealer(BaseModel):
 class SetDealerLimit(BaseModel):
     max_listings: int
 
+# User Onboarding Models
+class UserOnboarding(BaseModel):
+    account_type: str  # "individual" or "dealer"
+    store_name: Optional[str] = None  # Required if dealer
+
+# Admin User Management Models
+class AdminUpdateUser(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    is_admin: Optional[bool] = None
+    role: Optional[str] = None
+    max_listings: Optional[int] = None
+
+class AdminUpdateListing(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    price: Optional[float] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[int] = None
+    hours_used: Optional[int] = None
+    condition: Optional[str] = None
+    city: Optional[str] = None
+    whatsapp: Optional[str] = None
+    status: Optional[str] = None
+    is_featured: Optional[bool] = None
+
 # Password hashing utilities
 def hash_password(password: str) -> str:
     """Hash password with salt"""
@@ -714,6 +742,86 @@ async def list_public_dealers():
     
     return result
 
+# =============================================================================
+# USER ONBOARDING ROUTES
+# =============================================================================
+
+@api_router.get("/user/profile")
+async def get_user_profile(request: Request):
+    """Get current user's profile with limits"""
+    user = await require_user(request)
+    
+    # Count active listings
+    active_count = await db.listings.count_documents({
+        "user_id": user["user_id"],
+        "status": {"$in": ["approved", "pending"]}
+    })
+    
+    # Get max listings based on account type
+    if user.get("role") == "dealer":
+        max_listings = user.get("dealer_profile", {}).get("max_listings", 20)
+    else:
+        max_listings = user.get("max_listings", 3)  # Default 3 for individuals
+    
+    return {
+        "user_id": user["user_id"],
+        "email": user["email"],
+        "name": user["name"],
+        "picture": user.get("picture"),
+        "role": user.get("role", "user"),
+        "account_type": user.get("account_type"),  # "individual" or "dealer"
+        "onboarding_complete": user.get("onboarding_complete", False),
+        "is_admin": user.get("is_admin", False),
+        "max_listings": max_listings,
+        "active_listings": active_count,
+        "dealer_profile": user.get("dealer_profile") if user.get("role") == "dealer" else None
+    }
+
+@api_router.post("/user/onboarding")
+async def complete_onboarding(data: UserOnboarding, request: Request):
+    """Complete user onboarding - select account type"""
+    user = await require_user(request)
+    
+    if data.account_type not in ["individual", "dealer"]:
+        raise HTTPException(status_code=400, detail="Tipo de conta inválido")
+    
+    update_data = {
+        "account_type": data.account_type,
+        "onboarding_complete": True
+    }
+    
+    if data.account_type == "individual":
+        update_data["role"] = "user"
+        update_data["max_listings"] = 3  # Individual sellers get 3 listings
+    elif data.account_type == "dealer":
+        if not data.store_name:
+            raise HTTPException(status_code=400, detail="Nome da loja é obrigatório para Dealers")
+        
+        # Generate slug
+        slug = generate_slug(data.store_name)
+        existing = await db.users.find_one({"dealer_profile.store_slug": slug})
+        if existing:
+            slug = f"{slug}-{uuid.uuid4().hex[:6]}"
+        
+        update_data["role"] = "dealer"
+        update_data["dealer_profile"] = {
+            "store_name": data.store_name,
+            "store_slug": slug,
+            "store_logo": None,
+            "whatsapp": "",
+            "city": "",
+            "description": "",
+            "max_listings": 10,  # Dealers start with 10 listings
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+    
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": update_data})
+    
+    # Return updated user
+    updated_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
+    return updated_user
+
 @api_router.get("/dealers/{slug}")
 async def get_dealer_public(slug: str):
     """Get dealer public profile by slug"""
@@ -850,6 +958,152 @@ async def upload_dealer_logo(file: UploadFile = File(...), request: Request = No
     )
     
     return {"path": result["path"], "message": "Logo atualizado"}
+
+# =============================================================================
+# ADMIN SUPER ROUTES (Statistics & Management)
+# =============================================================================
+
+@api_router.get("/admin/stats")
+async def get_admin_stats(request: Request):
+    """Get admin dashboard statistics"""
+    await require_admin(request)
+    
+    # Count users
+    total_users = await db.users.count_documents({})
+    total_dealers = await db.users.count_documents({"role": "dealer"})
+    total_individuals = await db.users.count_documents({"role": {"$ne": "dealer"}})
+    
+    # Count listings
+    total_listings = await db.listings.count_documents({})
+    pending_listings = await db.listings.count_documents({"status": "pending"})
+    approved_listings = await db.listings.count_documents({"status": "approved"})
+    rejected_listings = await db.listings.count_documents({"status": "rejected"})
+    featured_listings = await db.listings.count_documents({"is_featured": True, "status": "approved"})
+    
+    # Count by category
+    categories = {}
+    for cat in ["tratores", "implementos", "colheitadeiras", "pecas"]:
+        categories[cat] = await db.listings.count_documents({"category": cat, "status": "approved"})
+    
+    # Recent activity (last 7 days)
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    new_users_week = await db.users.count_documents({"created_at": {"$gte": week_ago}})
+    new_listings_week = await db.listings.count_documents({"created_at": {"$gte": week_ago}})
+    
+    return {
+        "users": {
+            "total": total_users,
+            "dealers": total_dealers,
+            "individuals": total_individuals,
+            "new_this_week": new_users_week
+        },
+        "listings": {
+            "total": total_listings,
+            "pending": pending_listings,
+            "approved": approved_listings,
+            "rejected": rejected_listings,
+            "featured": featured_listings,
+            "new_this_week": new_listings_week
+        },
+        "categories": categories
+    }
+
+@api_router.put("/admin/users/{user_id}")
+async def admin_update_user(user_id: str, data: AdminUpdateUser, request: Request):
+    """Admin update user details"""
+    await require_admin(request)
+    
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    
+    if update_data:
+        await db.users.update_one({"user_id": user_id}, {"$set": update_data})
+    
+    updated_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return updated_user
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, request: Request):
+    """Admin delete user and their listings"""
+    await require_admin(request)
+    
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    # Delete user's listings
+    deleted_listings = await db.listings.delete_many({"user_id": user_id})
+    
+    # Delete user
+    await db.users.delete_one({"user_id": user_id})
+    
+    return {
+        "message": f"Usuário {user['name']} removido",
+        "deleted_listings": deleted_listings.deleted_count
+    }
+
+@api_router.put("/admin/users/{user_id}/limit")
+async def admin_set_user_limit(user_id: str, data: SetDealerLimit, request: Request):
+    """Set listing limit for any user (not just dealers)"""
+    await require_admin(request)
+    
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    if user.get("role") == "dealer":
+        # Update dealer profile limit
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"dealer_profile.max_listings": data.max_listings}}
+        )
+    else:
+        # Update individual user limit
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"max_listings": data.max_listings}}
+        )
+    
+    return {"message": f"Limite atualizado para {data.max_listings} anúncios"}
+
+@api_router.put("/admin/listings/{listing_id}")
+async def admin_update_listing(listing_id: str, data: AdminUpdateListing, request: Request):
+    """Admin update any listing"""
+    await require_admin(request)
+    
+    listing = await db.listings.find_one({"listing_id": listing_id})
+    if not listing:
+        raise HTTPException(status_code=404, detail="Anúncio não encontrado")
+    
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    
+    # If changing status to approved, set approval date and expiry
+    if update_data.get("status") == "approved" and listing.get("status") != "approved":
+        now = datetime.now(timezone.utc)
+        update_data["approved_at"] = now.isoformat()
+        update_data["expires_at"] = (now + timedelta(days=90)).isoformat()
+    
+    if update_data:
+        await db.listings.update_one({"listing_id": listing_id}, {"$set": update_data})
+    
+    updated_listing = await db.listings.find_one({"listing_id": listing_id}, {"_id": 0})
+    return updated_listing
+
+@api_router.delete("/admin/listings/{listing_id}")
+async def admin_delete_listing(listing_id: str, request: Request):
+    """Admin delete any listing"""
+    await require_admin(request)
+    
+    listing = await db.listings.find_one({"listing_id": listing_id})
+    if not listing:
+        raise HTTPException(status_code=404, detail="Anúncio não encontrado")
+    
+    await db.listings.delete_one({"listing_id": listing_id})
+    
+    return {"message": "Anúncio removido com sucesso"}
 
 # =============================================================================
 # ADMIN DEALER ROUTES
@@ -1046,18 +1300,22 @@ async def create_listing(listing: ListingCreate, request: Request):
     """Create new listing (requires auth)"""
     user = await require_user(request)
     
-    # Check dealer listing limit
+    # Check listing limit based on user type
+    current_count = await db.listings.count_documents({
+        "user_id": user["user_id"],
+        "status": {"$in": ["pending", "approved"]}
+    })
+    
     if user.get("role") == "dealer":
         max_listings = user.get("dealer_profile", {}).get("max_listings", 20)
-        current_count = await db.listings.count_documents({
-            "user_id": user["user_id"],
-            "status": {"$in": ["pending", "approved"]}
-        })
-        if current_count >= max_listings:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Limite de {max_listings} anúncios ativos atingido. Entre em contato com o administrador."
-            )
+    else:
+        max_listings = user.get("max_listings", 3)  # Default 3 for individuals
+    
+    if current_count >= max_listings:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Limite de {max_listings} anúncios ativos atingido. Entre em contato com o administrador para aumentar seu limite."
+        )
     
     listing_id = f"listing_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
