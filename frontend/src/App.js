@@ -7,7 +7,8 @@ import {
   Search, Menu, X, MapPin, Phone, ChevronRight, Star, Eye, Clock, 
   Plus, LogOut, User, Settings, Tractor, Wrench, Cog, Loader2,
   ChevronLeft, MessageCircle, Share2, Heart, Filter, Grid, List,
-  Upload, Image as ImageIcon, Trash2, Edit, Camera, Shield, Lock, Mail
+  Upload, Image as ImageIcon, Trash2, Edit, Camera, Shield, Lock, Mail,
+  Store, Users, Building2, Package
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -291,12 +292,24 @@ const Header = () => {
                   <div className="px-2 py-1.5">
                     <p className="text-sm font-medium">{user.name}</p>
                     <p className="text-xs text-slate-500">{user.email}</p>
+                    {user.role === 'dealer' && (
+                      <Badge className="mt-1 bg-[#F9C02D] text-[#1A4D2E] text-xs">
+                        <Store className="w-3 h-3 mr-1" />
+                        Dealer
+                      </Badge>
+                    )}
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate('/dashboard')} data-testid="menu-dashboard">
                     <User className="w-4 h-4 mr-2" />
                     Meus Anúncios
                   </DropdownMenuItem>
+                  {user.role === 'dealer' && user.dealer_profile?.store_slug && (
+                    <DropdownMenuItem onClick={() => navigate(`/loja/${user.dealer_profile.store_slug}`)} data-testid="menu-my-store">
+                      <Store className="w-4 h-4 mr-2" />
+                      Minha Loja
+                    </DropdownMenuItem>
+                  )}
                   {user.is_admin && (
                     <DropdownMenuItem onClick={() => navigate('/admin')} data-testid="menu-admin">
                       <Settings className="w-4 h-4 mr-2" />
@@ -1683,14 +1696,20 @@ const DashboardPage = () => {
   const location = useLocation();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dealerInfo, setDealerInfo] = useState(null);
+
+  const currentUser = user || location.state?.user;
 
   useEffect(() => {
-    if (!user && !location.state?.user) {
+    if (!currentUser) {
       navigate('/login');
       return;
     }
     fetchListings();
-  }, [user, navigate, location.state]);
+    if (currentUser?.role === 'dealer') {
+      fetchDealerInfo();
+    }
+  }, [currentUser, navigate]);
 
   const fetchListings = async () => {
     try {
@@ -1703,6 +1722,15 @@ const DashboardPage = () => {
     }
   };
 
+  const fetchDealerInfo = async () => {
+    try {
+      const res = await axios.get(`${API}/dealer/profile`, { withCredentials: true });
+      setDealerInfo(res.data);
+    } catch (error) {
+      console.error("Error fetching dealer info:", error);
+    }
+  };
+
   const handleDelete = async (listingId) => {
     if (!window.confirm('Tem certeza que deseja excluir este anúncio?')) return;
     
@@ -1710,6 +1738,7 @@ const DashboardPage = () => {
       await axios.delete(`${API}/listings/${listingId}`, { withCredentials: true });
       toast.success("Anúncio excluído");
       fetchListings();
+      if (currentUser?.role === 'dealer') fetchDealerInfo();
     } catch (error) {
       toast.error("Erro ao excluir anúncio");
     }
@@ -1730,11 +1759,65 @@ const DashboardPage = () => {
     expired: { label: 'Expirado', className: 'bg-slate-100 text-slate-600' }
   };
 
+  const activeListings = listings.filter(l => l.status === 'approved' || l.status === 'pending').length;
+
   return (
     <div className="min-h-screen bg-slate-50 py-8" data-testid="dashboard-page">
       <SEOHead title="Meus Anúncios" />
       
       <div className="max-w-6xl mx-auto px-4 md:px-8">
+        {/* Dealer Info Card */}
+        {currentUser?.role === 'dealer' && dealerInfo && (
+          <Card className="mb-6 bg-gradient-to-r from-[#1A4D2E] to-[#2d6e45] text-white">
+            <CardContent className="p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-xl bg-white/10 flex items-center justify-center">
+                    {dealerInfo.dealer_profile?.store_logo ? (
+                      <img 
+                        src={`${API}/files/${dealerInfo.dealer_profile.store_logo}`}
+                        alt="Logo"
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    ) : (
+                      <Store className="w-8 h-8 text-white/70" />
+                    )}
+                  </div>
+                  <div>
+                    <Badge className="bg-[#F9C02D] text-[#1A4D2E] text-xs mb-1">
+                      <Store className="w-3 h-3 mr-1" />
+                      Dealer
+                    </Badge>
+                    <h2 className="text-xl font-bold">{dealerInfo.dealer_profile?.store_name}</h2>
+                    <p className="text-white/70 text-sm">
+                      /loja/{dealerInfo.dealer_profile?.store_slug}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <p className="text-3xl font-bold">{dealerInfo.active_listings}</p>
+                    <p className="text-white/70 text-sm">Ativos</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-3xl font-bold">{dealerInfo.pending_listings}</p>
+                    <p className="text-white/70 text-sm">Pendentes</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-3xl font-bold">{dealerInfo.max_listings}</p>
+                    <p className="text-white/70 text-sm">Limite</p>
+                  </div>
+                </div>
+              </div>
+              {dealerInfo.active_listings + dealerInfo.pending_listings >= dealerInfo.max_listings && (
+                <div className="mt-4 p-3 bg-red-500/20 rounded-lg text-sm">
+                  Você atingiu o limite de anúncios. Entre em contato com o administrador para aumentar seu limite.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900" style={{ fontFamily: 'Outfit' }}>
@@ -1746,6 +1829,7 @@ const DashboardPage = () => {
             onClick={() => navigate('/anunciar')}
             className="bg-[#F9C02D] hover:bg-[#f5b00b] text-[#1A4D2E] font-bold"
             data-testid="new-listing-button"
+            disabled={currentUser?.role === 'dealer' && dealerInfo && activeListings >= dealerInfo.max_listings}
           >
             <Plus className="w-4 h-4 mr-2" />
             Novo Anúncio
@@ -2063,9 +2147,22 @@ const AdminPage = () => {
   const navigate = useNavigate();
   const [listings, setListings] = useState([]);
   const [users, setUsers] = useState([]);
+  const [dealers, setDealers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
   const [activeTab, setActiveTab] = useState('listings');
+  
+  // Promote to Dealer Modal
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [promoteEmail, setPromoteEmail] = useState('');
+  const [promoteStoreName, setPromoteStoreName] = useState('');
+  const [promoteMaxListings, setPromoteMaxListings] = useState('20');
+  const [promotingUser, setPromotingUser] = useState(false);
+  
+  // Edit Dealer Limit Modal
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [editingDealer, setEditingDealer] = useState(null);
+  const [newLimit, setNewLimit] = useState('');
 
   useEffect(() => {
     if (!admin) {
@@ -2104,9 +2201,20 @@ const AdminPage = () => {
     }
   };
 
+  const fetchDealers = async () => {
+    try {
+      const res = await axios.get(`${API}/admin/dealers`, { withCredentials: true });
+      setDealers(res.data);
+    } catch (error) {
+      toast.error("Erro ao carregar dealers");
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'users') {
       fetchUsers();
+    } else if (activeTab === 'dealers') {
+      fetchDealers();
     }
   }, [activeTab]);
 
@@ -2137,6 +2245,77 @@ const AdminPage = () => {
       fetchListings();
     } catch (error) {
       toast.error("Erro ao alterar destaque");
+    }
+  };
+
+  const handlePromoteToDealer = async (e) => {
+    e.preventDefault();
+    if (!promoteEmail || !promoteStoreName) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+    
+    setPromotingUser(true);
+    try {
+      await axios.post(`${API}/admin/dealers/promote`, {
+        user_email: promoteEmail,
+        store_name: promoteStoreName,
+        max_listings: parseInt(promoteMaxListings) || 20
+      }, { withCredentials: true });
+      
+      toast.success("Usuário promovido a dealer!");
+      setShowPromoteModal(false);
+      setPromoteEmail('');
+      setPromoteStoreName('');
+      setPromoteMaxListings('20');
+      fetchDealers();
+      fetchUsers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao promover usuário");
+    } finally {
+      setPromotingUser(false);
+    }
+  };
+
+  const handleSetDealerLimit = async (e) => {
+    e.preventDefault();
+    if (!editingDealer || !newLimit) return;
+    
+    try {
+      await axios.put(`${API}/admin/dealers/${editingDealer.user_id}/limit`, {
+        max_listings: parseInt(newLimit)
+      }, { withCredentials: true });
+      
+      toast.success("Limite atualizado!");
+      setShowLimitModal(false);
+      setEditingDealer(null);
+      setNewLimit('');
+      fetchDealers();
+    } catch (error) {
+      toast.error("Erro ao atualizar limite");
+    }
+  };
+
+  const handleToggleDealerActive = async (dealer) => {
+    try {
+      await axios.post(`${API}/admin/dealers/${dealer.user_id}/toggle-active`, {}, { withCredentials: true });
+      toast.success(dealer.dealer_profile?.is_active ? "Dealer desativado" : "Dealer ativado");
+      fetchDealers();
+    } catch (error) {
+      toast.error("Erro ao alterar status");
+    }
+  };
+
+  const handleDemoteDealer = async (dealer) => {
+    if (!window.confirm(`Remover status de dealer de ${dealer.name}? Os anúncios serão mantidos.`)) return;
+    
+    try {
+      await axios.delete(`${API}/admin/dealers/${dealer.user_id}`, { withCredentials: true });
+      toast.success("Status de dealer removido");
+      fetchDealers();
+      fetchUsers();
+    } catch (error) {
+      toast.error("Erro ao remover dealer");
     }
   };
 
@@ -2203,6 +2382,9 @@ const AdminPage = () => {
           <TabsList className="bg-slate-800">
             <TabsTrigger value="listings" className="data-[state=active]:bg-[#1A4D2E]">
               Anúncios
+            </TabsTrigger>
+            <TabsTrigger value="dealers" className="data-[state=active]:bg-[#1A4D2E]" data-testid="tab-dealers">
+              Dealers
             </TabsTrigger>
             <TabsTrigger value="users" className="data-[state=active]:bg-[#1A4D2E]">
               Usuários
@@ -2310,6 +2492,118 @@ const AdminPage = () => {
             </Tabs>
           </TabsContent>
 
+          {/* Dealers Tab */}
+          <TabsContent value="dealers">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-white">Gerenciar Dealers (Lojas)</h2>
+              <Button 
+                onClick={() => setShowPromoteModal(true)}
+                className="bg-[#F9C02D] hover:bg-[#f5b00b] text-[#1A4D2E]"
+                data-testid="promote-dealer-btn"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Novo Dealer
+              </Button>
+            </div>
+
+            {dealers.length > 0 ? (
+              <div className="space-y-4">
+                {dealers.map(dealer => (
+                  <Card key={dealer.user_id} className="overflow-hidden bg-slate-800 border-slate-700">
+                    <div className="flex flex-col md:flex-row">
+                      <div className="md:w-32 h-32 bg-slate-700 flex items-center justify-center">
+                        {dealer.dealer_profile?.store_logo ? (
+                          <img 
+                            src={`${API}/files/${dealer.dealer_profile.store_logo}`}
+                            alt={dealer.dealer_profile.store_name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Store className="w-12 h-12 text-slate-500" />
+                        )}
+                      </div>
+                      <div className="flex-1 p-4">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-lg text-white">
+                                {dealer.dealer_profile?.store_name || 'Sem nome'}
+                              </h3>
+                              {!dealer.dealer_profile?.is_active && (
+                                <Badge variant="outline" className="text-red-400 border-red-600">Inativo</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-slate-400">
+                              {dealer.name} • {dealer.email}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              {dealer.dealer_profile?.city && `${dealer.dealer_profile.city}, MS • `}
+                              Slug: /loja/{dealer.dealer_profile?.store_slug}
+                            </p>
+                            <div className="flex gap-4 mt-2 text-sm">
+                              <span className="text-green-400">
+                                <strong>{dealer.active_listings}</strong> ativos
+                              </span>
+                              <span className="text-amber-400">
+                                <strong>{dealer.pending_listings}</strong> pendentes
+                              </span>
+                              <span className="text-slate-400">
+                                Limite: <strong>{dealer.dealer_profile?.max_listings || 20}</strong>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingDealer(dealer);
+                                setNewLimit(dealer.dealer_profile?.max_listings?.toString() || '20');
+                                setShowLimitModal(true);
+                              }}
+                              className="text-slate-300 border-slate-600 hover:bg-slate-700"
+                              data-testid={`edit-limit-${dealer.user_id}`}
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              Limite
+                            </Button>
+                            <Button 
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleToggleDealerActive(dealer)}
+                              className={dealer.dealer_profile?.is_active 
+                                ? "text-red-400 border-red-700 hover:bg-red-900/50" 
+                                : "text-green-400 border-green-700 hover:bg-green-900/50"
+                              }
+                            >
+                              {dealer.dealer_profile?.is_active ? 'Desativar' : 'Ativar'}
+                            </Button>
+                            <Button 
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDemoteDealer(dealer)}
+                              className="text-red-400 border-red-700 hover:bg-red-900/50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card className="p-12 text-center bg-slate-800 border-slate-700">
+                <Store className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+                <p className="text-slate-400">Nenhum dealer cadastrado</p>
+                <p className="text-sm text-slate-500 mt-2">
+                  Clique em "Novo Dealer" para promover um usuário
+                </p>
+              </Card>
+            )}
+          </TabsContent>
+
           <TabsContent value="users">
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader>
@@ -2332,6 +2626,12 @@ const AdminPage = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {user.role === 'dealer' && (
+                          <Badge className="bg-[#F9C02D] text-[#1A4D2E]">
+                            <Store className="w-3 h-3 mr-1" />
+                            Dealer
+                          </Badge>
+                        )}
                         {user.is_admin && (
                           <Badge className="bg-[#1A4D2E]">Admin</Badge>
                         )}
@@ -2346,6 +2646,117 @@ const AdminPage = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Promote to Dealer Modal */}
+        <Dialog open={showPromoteModal} onOpenChange={setShowPromoteModal}>
+          <DialogContent className="bg-slate-800 border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">Promover a Dealer</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Transforme um usuário em uma loja (dealer) do marketplace
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handlePromoteToDealer} className="space-y-4 mt-4">
+              <div>
+                <Label className="text-slate-300">Email do Usuário</Label>
+                <Input
+                  type="email"
+                  value={promoteEmail}
+                  onChange={(e) => setPromoteEmail(e.target.value)}
+                  placeholder="usuario@email.com"
+                  className="mt-1 bg-slate-700 border-slate-600 text-white"
+                  data-testid="promote-email-input"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">Nome da Loja</Label>
+                <Input
+                  value={promoteStoreName}
+                  onChange={(e) => setPromoteStoreName(e.target.value)}
+                  placeholder="Ex: Tratores do Sul"
+                  className="mt-1 bg-slate-700 border-slate-600 text-white"
+                  data-testid="promote-store-name-input"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">Limite de Anúncios</Label>
+                <Input
+                  type="number"
+                  value={promoteMaxListings}
+                  onChange={(e) => setPromoteMaxListings(e.target.value)}
+                  placeholder="20"
+                  className="mt-1 bg-slate-700 border-slate-600 text-white"
+                  data-testid="promote-limit-input"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Quantidade máxima de anúncios ativos permitidos
+                </p>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setShowPromoteModal(false)}
+                  className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  type="submit"
+                  disabled={promotingUser}
+                  className="flex-1 bg-[#1A4D2E] hover:bg-[#143d24]"
+                  data-testid="promote-submit-btn"
+                >
+                  {promotingUser ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Store className="w-4 h-4 mr-2" />}
+                  Promover
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Dealer Limit Modal */}
+        <Dialog open={showLimitModal} onOpenChange={setShowLimitModal}>
+          <DialogContent className="bg-slate-800 border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">Alterar Limite de Anúncios</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                {editingDealer?.dealer_profile?.store_name}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSetDealerLimit} className="space-y-4 mt-4">
+              <div>
+                <Label className="text-slate-300">Novo Limite</Label>
+                <Input
+                  type="number"
+                  value={newLimit}
+                  onChange={(e) => setNewLimit(e.target.value)}
+                  placeholder="20"
+                  className="mt-1 bg-slate-700 border-slate-600 text-white"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Atualmente: {editingDealer?.active_listings || 0} anúncios ativos
+                </p>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setShowLimitModal(false)}
+                  className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  type="submit"
+                  className="flex-1 bg-[#1A4D2E] hover:bg-[#143d24]"
+                >
+                  Salvar
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
@@ -2398,6 +2809,236 @@ const LoginPage = () => {
   );
 };
 
+// Public Store Page (Dealer)
+const StorePage = () => {
+  const { slug } = useParams();
+  const [dealer, setDealer] = useState(null);
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [category, setCategory] = useState('');
+
+  useEffect(() => {
+    const fetchDealer = async () => {
+      try {
+        const res = await axios.get(`${API}/dealers/${slug}`);
+        setDealer(res.data);
+      } catch (error) {
+        console.error("Error fetching dealer:", error);
+        toast.error("Loja não encontrada");
+      }
+    };
+    fetchDealer();
+  }, [slug]);
+
+  useEffect(() => {
+    const fetchListings = async () => {
+      if (!dealer) return;
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (category) params.set('category', category);
+        params.set('page', page.toString());
+        params.set('limit', '12');
+        
+        const res = await axios.get(`${API}/dealers/${slug}/listings?${params.toString()}`);
+        setListings(res.data.listings || []);
+        setTotal(res.data.total || 0);
+      } catch (error) {
+        console.error("Error fetching listings:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchListings();
+  }, [dealer, slug, category, page]);
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 0
+    }).format(price);
+  };
+
+  const handleWhatsAppClick = () => {
+    if (!dealer?.dealer_profile?.whatsapp) return;
+    const phone = dealer.dealer_profile.whatsapp.replace(/\D/g, '');
+    const message = encodeURIComponent(`Olá! Vi sua loja "${dealer.dealer_profile.store_name}" no TratorShop.`);
+    window.open(`https://wa.me/55${phone}?text=${message}`, '_blank');
+  };
+
+  const categoryNames = {
+    tratores: 'Tratores',
+    implementos: 'Implementos',
+    colheitadeiras: 'Colheitadeiras',
+    pecas: 'Peças'
+  };
+
+  if (!dealer && !loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <Store className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h1 className="text-xl font-semibold text-slate-900 mb-2">Loja não encontrada</h1>
+          <p className="text-slate-500 mb-4">A loja que você procura não existe ou foi desativada.</p>
+          <Link to="/">
+            <Button className="bg-[#1A4D2E] hover:bg-[#143d24]">Voltar ao início</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const logoUrl = dealer?.dealer_profile?.store_logo 
+    ? `${API}/files/${dealer.dealer_profile.store_logo}`
+    : null;
+
+  return (
+    <div className="min-h-screen bg-slate-50" data-testid="store-page">
+      <SEOHead 
+        title={dealer?.dealer_profile?.store_name ? `${dealer.dealer_profile.store_name} | TratorShop` : 'Loja'}
+        description={dealer?.dealer_profile?.description || `Confira os anúncios da loja ${dealer?.dealer_profile?.store_name} no TratorShop`}
+      />
+      
+      {/* Store Header */}
+      <div className="bg-[#1A4D2E] text-white">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 md:py-12">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+            {/* Store Logo */}
+            <div className="w-24 h-24 md:w-32 md:h-32 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
+              {logoUrl ? (
+                <img src={logoUrl} alt={dealer?.dealer_profile?.store_name} className="w-full h-full object-cover" />
+              ) : (
+                <Store className="w-12 h-12 md:w-16 md:h-16 text-white/50" />
+              )}
+            </div>
+            
+            {/* Store Info */}
+            <div className="flex-1 text-center md:text-left">
+              <Badge className="bg-[#F9C02D] text-[#1A4D2E] mb-2">
+                <Store className="w-3 h-3 mr-1" />
+                Loja Oficial
+              </Badge>
+              <h1 className="text-2xl md:text-4xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>
+                {dealer?.dealer_profile?.store_name || 'Carregando...'}
+              </h1>
+              {dealer?.dealer_profile?.city && (
+                <p className="text-white/80 flex items-center justify-center md:justify-start gap-1 mb-3">
+                  <MapPin className="w-4 h-4" />
+                  {dealer.dealer_profile.city}, MS
+                </p>
+              )}
+              {dealer?.dealer_profile?.description && (
+                <p className="text-white/70 max-w-2xl mb-4">
+                  {dealer.dealer_profile.description}
+                </p>
+              )}
+              <div className="flex items-center justify-center md:justify-start gap-4">
+                <span className="text-white/80">
+                  <strong className="text-white">{dealer?.active_listings || 0}</strong> anúncios ativos
+                </span>
+                {dealer?.dealer_profile?.whatsapp && (
+                  <Button 
+                    onClick={handleWhatsAppClick}
+                    className="bg-[#25D366] hover:bg-[#1ebd59] text-white"
+                    data-testid="store-whatsapp"
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    WhatsApp da Loja
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Listings */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <h2 className="text-xl font-semibold text-slate-900" style={{ fontFamily: 'Outfit' }}>
+            Anúncios da Loja
+          </h2>
+          <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
+            <Button
+              variant={!category ? "default" : "outline"}
+              size="sm"
+              onClick={() => setCategory('')}
+              className={!category ? "bg-[#1A4D2E]" : ""}
+            >
+              Todos
+            </Button>
+            {['tratores', 'implementos', 'colheitadeiras', 'pecas'].map(cat => (
+              <Button
+                key={cat}
+                variant={category === cat ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCategory(cat)}
+                className={category === cat ? "bg-[#1A4D2E]" : ""}
+              >
+                {categoryNames[cat]}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Listings Grid */}
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <Card key={i} className="overflow-hidden">
+                <Skeleton className="aspect-[4/3]" />
+                <CardContent className="p-4">
+                  <Skeleton className="h-6 w-24 mb-2" />
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-32" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : listings.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {listings.map(listing => (
+              <ListingCard key={listing.listing_id} listing={listing} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500">Nenhum anúncio disponível nesta categoria</p>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {total > 12 && (
+          <div className="flex justify-center gap-2 mt-8">
+            <Button
+              variant="outline"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="flex items-center px-4 text-slate-600">
+              Página {page} de {Math.ceil(total / 12)}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => setPage(p => p + 1)}
+              disabled={page >= Math.ceil(total / 12)}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // App Router
 const AppRouter = () => {
   const location = useLocation();
@@ -2429,6 +3070,7 @@ const AppRouter = () => {
           <Route path="/editar/:id" element={<ListingFormPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/loja/:slug" element={<StorePage />} />
         </Routes>
       </main>
       <Footer />

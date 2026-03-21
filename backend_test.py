@@ -11,7 +11,7 @@ from datetime import datetime
 from time import sleep
 
 class TratorShopAPITester:
-    def __init__(self, base_url="https://maquinas-ms.preview.emergentagent.com"):
+    def __init__(self, base_url="https://shop-admin-panel-10.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.session_token = None
@@ -470,6 +470,79 @@ class TratorShopAPITester:
         except Exception as e:
             self.log_test("Admin protected endpoints tests", False, None, str(e))
 
+    def test_dealer_endpoints_404(self):
+        """Test dealer endpoints return 404 for non-existent stores"""
+        # Test non-existent dealer profile
+        try:
+            response = requests.get(f"{self.api_url}/dealers/shop-admin-panel-10")
+            success = response.status_code == 404
+            if success:
+                data = response.json()
+                success = "Loja não encontrada" in data.get("detail", "")
+            self.log_test("GET /api/dealers/shop-admin-panel-10 (404)", success, response.status_code)
+        except Exception as e:
+            self.log_test("GET /api/dealers/shop-admin-panel-10 (404)", False, None, str(e))
+
+        # Test non-existent dealer listings
+        try:
+            response = requests.get(f"{self.api_url}/dealers/shop-admin-panel-10/listings")
+            success = response.status_code == 404
+            if success:
+                data = response.json()
+                success = "Loja não encontrada" in data.get("detail", "")
+            self.log_test("GET /api/dealers/shop-admin-panel-10/listings (404)", success, response.status_code)
+        except Exception as e:
+            self.log_test("GET /api/dealers/shop-admin-panel-10/listings (404)", False, None, str(e))
+
+    def test_admin_dealer_endpoints(self):
+        """Test admin dealer management endpoints"""
+        # First login as admin to get token
+        try:
+            admin_credentials = {
+                "email": "admin@tratorshop.com", 
+                "password": "Admin@123"
+            }
+            login_response = requests.post(f"{self.api_url}/admin/auth/login", json=admin_credentials)
+            if login_response.status_code != 200:
+                self.log_test("Admin dealer endpoints setup", False, login_response.status_code, "Failed to get admin token")
+                return
+            
+            # Extract admin_token from cookies
+            admin_token = None
+            if 'set-cookie' in login_response.headers:
+                cookies = login_response.headers['set-cookie']
+                for cookie in cookies.split(';'):
+                    if 'admin_token=' in cookie:
+                        admin_token = cookie.split('admin_token=')[1].split(';')[0]
+                        break
+            
+            if not admin_token:
+                self.log_test("Admin dealer token extraction", False, None, "Could not extract admin_token")
+                return
+            
+            headers = {"Cookie": f"admin_token={admin_token}"}
+            
+            # Test admin/dealers endpoint
+            response = requests.get(f"{self.api_url}/admin/dealers", headers=headers)
+            success = response.status_code == 200
+            if success:
+                data = response.json()
+                success = isinstance(data, list)  # Should return list of dealers
+            self.log_test("GET /api/admin/dealers (with token)", success, response.status_code)
+            
+        except Exception as e:
+            self.log_test("Admin dealer endpoints tests", False, None, str(e))
+
+    def run_dealer_tests(self):
+        """Run all dealer-specific tests"""
+        print("\n🏪 Testing Dealer System...")
+        
+        self.test_dealer_endpoints_404()
+        sleep(0.1)
+        
+        self.test_admin_dealer_endpoints()
+        sleep(0.1)
+
     def run_admin_auth_tests(self):
         """Run all admin authentication tests"""
         print("\n🔐 Testing Admin Authentication System...")
@@ -507,6 +580,7 @@ def main():
         tester.run_public_api_tests()
         tester.run_authenticated_tests()
         tester.run_admin_auth_tests()  # Add admin authentication tests
+        tester.run_dealer_tests()  # Add dealer system tests
         tester.print_summary()
         
         # Save results to JSON

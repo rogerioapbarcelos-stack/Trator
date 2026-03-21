@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-03-20T05:22:11.100927",
-  "total_tests": 24,
-  "passed_tests": 23,
-  "failed_tests": 1,
-  "success_rate": 95.83333333333334,
+  "timestamp": "2026-03-21T04:59:26.804022",
+  "total_tests": 26,
+  "passed_tests": 22,
+  "failed_tests": 4,
+  "success_rate": 84.61538461538461,
   "detailed_results": [
     {
       "test": "GET /api/",
@@ -57,19 +57,21 @@
     },
     {
       "test": "GET /api/auth/me (with auth)",
-      "status": "PASSED"
+      "status": "FAILED",
+      "error": null,
+      "status_code": 401
     },
     {
       "test": "GET /api/my-listings (with auth)",
-      "status": "PASSED"
+      "status": "FAILED",
+      "error": null,
+      "status_code": 401
     },
     {
       "test": "POST /api/listings (with auth)",
-      "status": "PASSED"
-    },
-    {
-      "test": "GET /api/listings/{id} (SEO data)",
-      "status": "PASSED"
+      "status": "FAILED",
+      "error": null,
+      "status_code": 401
     },
     {
       "test": "POST /api/admin/auth/login (correct credentials)",
@@ -101,6 +103,18 @@
     },
     {
       "test": "POST /api/admin/auth/logout",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/dealers/shop-admin-panel-10 (404)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/dealers/shop-admin-panel-10/listings (404)",
+      "status": "PASSED"
+    },
+    {
+      "test": "GET /api/admin/dealers (with token)",
       "status": "PASSED"
     }
   ]
