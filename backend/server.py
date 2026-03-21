@@ -575,6 +575,35 @@ def generate_slug(name: str) -> str:
     slug = slug.strip('-')
     return slug
 
+@api_router.get("/dealers")
+async def list_public_dealers():
+    """List all active dealers (public)"""
+    dealers = await db.users.find(
+        {"role": "dealer", "dealer_profile.is_active": True},
+        {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "dealer_profile": 1}
+    ).to_list(100)
+    
+    # Add listing counts for each dealer
+    result = []
+    for dealer in dealers:
+        active_count = await db.listings.count_documents({
+            "user_id": dealer["user_id"],
+            "status": "approved"
+        })
+        result.append({
+            "user_id": dealer["user_id"],
+            "name": dealer["name"],
+            "picture": dealer.get("picture"),
+            "store_name": dealer.get("dealer_profile", {}).get("store_name"),
+            "store_slug": dealer.get("dealer_profile", {}).get("store_slug"),
+            "store_logo": dealer.get("dealer_profile", {}).get("store_logo"),
+            "city": dealer.get("dealer_profile", {}).get("city"),
+            "description": dealer.get("dealer_profile", {}).get("description"),
+            "active_listings": active_count
+        })
+    
+    return result
+
 @api_router.get("/dealers/{slug}")
 async def get_dealer_public(slug: str):
     """Get dealer public profile by slug"""

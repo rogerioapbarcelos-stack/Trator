@@ -397,6 +397,7 @@ const Footer = () => (
             <li><Link to="/buscar?category=implementos" className="hover:text-white">Implementos</Link></li>
             <li><Link to="/buscar?category=colheitadeiras" className="hover:text-white">Colheitadeiras</Link></li>
             <li><Link to="/buscar?category=pecas" className="hover:text-white">Peças</Link></li>
+            <li><Link to="/lojas" className="hover:text-white">Lojas Oficiais</Link></li>
           </ul>
         </div>
 
@@ -2809,6 +2810,132 @@ const LoginPage = () => {
   );
 };
 
+// All Stores Page
+const StoresListPage = () => {
+  const [dealers, setDealers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchDealers = async () => {
+      try {
+        const res = await axios.get(`${API}/dealers`);
+        setDealers(res.data);
+      } catch (error) {
+        console.error("Error fetching dealers:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDealers();
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-slate-50" data-testid="stores-list-page">
+      <SEOHead 
+        title="Lojas | TratorShop"
+        description="Confira todas as lojas de máquinas agrícolas no TratorShop. Encontre dealers de tratores, implementos e colheitadeiras em Mato Grosso do Sul."
+      />
+      
+      {/* Header */}
+      <div className="bg-[#1A4D2E] text-white py-12">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 text-center">
+          <Store className="w-12 h-12 mx-auto mb-4 text-[#F9C02D]" />
+          <h1 className="text-3xl md:text-4xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>
+            Lojas Oficiais
+          </h1>
+          <p className="text-white/80 max-w-2xl mx-auto">
+            Encontre dealers de máquinas agrícolas em todo o Mato Grosso do Sul
+          </p>
+        </div>
+      </div>
+
+      {/* Stores Grid */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <Card key={i} className="overflow-hidden">
+                <div className="p-6">
+                  <Skeleton className="w-20 h-20 rounded-xl mx-auto mb-4" />
+                  <Skeleton className="h-6 w-32 mx-auto mb-2" />
+                  <Skeleton className="h-4 w-24 mx-auto mb-4" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : dealers.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {dealers.map(dealer => (
+              <Card 
+                key={dealer.user_id} 
+                className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
+                onClick={() => navigate(`/loja/${dealer.store_slug}`)}
+                data-testid={`store-card-${dealer.store_slug}`}
+              >
+                <CardContent className="p-6 text-center">
+                  {/* Store Logo */}
+                  <div className="w-20 h-20 mx-auto mb-4 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    {dealer.store_logo ? (
+                      <img 
+                        src={`${API}/files/${dealer.store_logo}`}
+                        alt={dealer.store_name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Store className="w-10 h-10 text-slate-400" />
+                    )}
+                  </div>
+                  
+                  {/* Store Info */}
+                  <Badge className="bg-[#F9C02D] text-[#1A4D2E] text-xs mb-2">
+                    Loja Oficial
+                  </Badge>
+                  <h3 className="font-semibold text-lg text-slate-900 mb-1" style={{ fontFamily: 'Outfit' }}>
+                    {dealer.store_name || 'Sem nome'}
+                  </h3>
+                  {dealer.city && (
+                    <p className="text-slate-500 text-sm flex items-center justify-center gap-1 mb-3">
+                      <MapPin className="w-4 h-4" />
+                      {dealer.city}, MS
+                    </p>
+                  )}
+                  
+                  {/* Stats */}
+                  <div className="flex items-center justify-center gap-1 text-sm text-slate-600 mb-4">
+                    <Package className="w-4 h-4" />
+                    <span><strong>{dealer.active_listings}</strong> anúncios ativos</span>
+                  </div>
+                  
+                  {/* CTA Button */}
+                  <Button 
+                    className="w-full bg-[#1A4D2E] hover:bg-[#143d24] group-hover:bg-[#143d24]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/loja/${dealer.store_slug}`);
+                    }}
+                  >
+                    Ver Loja
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <Store className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500 mb-2">Nenhuma loja cadastrada ainda</p>
+            <p className="text-sm text-slate-400">Em breve teremos dealers parceiros!</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
 // Public Store Page (Dealer)
 const StorePage = () => {
   const { slug } = useParams();
@@ -3082,6 +3209,7 @@ const AppRouter = () => {
           <Route path="/editar/:id" element={<ListingFormPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/lojas" element={<StoresListPage />} />
           <Route path="/loja/:slug" element={<StorePage />} />
         </Routes>
       </main>
